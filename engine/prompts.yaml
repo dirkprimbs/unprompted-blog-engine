@@ -1,0 +1,247 @@
+# Prompts for the editorial pipeline.
+#
+# Everything the models are told lives here, so the wording can be tuned without
+# opening a Python file. The engine reads this at run time through
+# engine/prompts.py; nothing else in the engine contains prompt text.
+#
+# Each entry has:
+#   temperature - how much randomness that step gets. Judgement and extraction
+#                 steps sit at 0 so a real connection is found on every run
+#                 rather than only some; prose steps run warmer.
+#   text        - the prompt itself, as a YAML block scalar ("|-" keeps the
+#                 line breaks and drops the trailing newline).
+#
+# Placeholders are written as {name} and filled in by the engine. The set of
+# names available to each prompt is listed above it - a placeholder the engine
+# does not supply is an error at run time, not a silently broken prompt, so a
+# typo surfaces immediately instead of reaching the model. Deleting a
+# placeholder you do not want is fine. To include a literal brace, just write
+# it: only the exact names listed are substituted.
+#
+# Editing guidance: these prompts are aimed at small local models, which follow
+# short, concrete, emphatic instructions far better than long nuanced ones. If
+# a step starts misbehaving, prefer making the rule more specific over adding
+# another rule.
+
+# Turns the author's raw notes into a finished article. The one genuinely
+# creative step, and the only one that runs warm. Routed by draft shape:
+# prose drafts go to POLISH_PROSE (local), outline drafts to POLISH_OUTLINE
+# (remote) - see select_polish_role() in ingest.py. Both use this prompt.
+# The idea-preservation rule at the top is load-bearing: without it models
+# summarise the notes instead of expanding them.
+# Placeholders: {voice_guidelines} {raw_draft}
+polish:
+  temperature: 0.7
+  text: |-
+    You are the author's editor. The text below is the author's own rough notes for a blog post. Turn them into a finished, flowing article in their voice.
+
+    [MOST IMPORTANT RULE - DO NOT LOSE IDEAS]
+    The notes contain the author's actual thinking. Your job is to present ALL of it, not a summary of it.
+    - Keep every distinct point, argument, example, and section. If the notes make five points, the article makes five points.
+    - Keep any vivid phrase, metaphor, analogy, or joke the author used. These are the best part - reuse the author's own wording, do not paraphrase them away.
+    - Dropping or watering down an idea to make the text shorter or smoother is a FAILURE. When in doubt, keep it in.
+    - You may reorder for flow, merge fragments into sentences, and add light connective tissue, but do not invent new claims or facts.
+
+    [VOICE]
+    Write the way the author writes. Match this guide exactly, including the list of words and phrases you must never use:
+    {voice_guidelines}
+
+    [FORMAT]
+    - Clean Markdown. Translate any German into natural English.
+    - Do not output frontmatter, a title, JSON, or any preamble. Output ONLY the article body.
+
+    [AUTHOR'S NOTES]
+    {raw_draft}
+
+# First pass at tags, from the article text alone - deliberately blind to the
+# existing taxonomy so it describes what the piece is actually about.
+# Length is also enforced in code (_clip_tags), so a model that ignores the
+# two-word rule cannot introduce a long tag.
+# Placeholders: {polished_body}
+suggest_tags:
+  temperature: 0.2
+  text: |-
+    Analyze the article content below and suggest 2 to 4 highly accurate, concise tags.
+    Be specific to the actual topic (e.g., if it's about soccer or tattoos, suggest tags like "Sports" or "Tattoos").
+    Each tag must be ONE or TWO words maximum. Never more than two words.
+
+    Output ONLY a valid JSON list of strings. No markdown wrapping, no explanation.
+    Example Output: ["Sports", "Tattoos"]
+
+    [ARTICLE CONTENT]
+    {polished_body}
+
+# Second pass: reconcile the candidates against tags the blog already uses, so
+# near-duplicates collapse instead of multiplying. The emphatic "do NOT output
+# the entire database" rule is there because small models otherwise echo the
+# whole existing list back.
+# Placeholders: {candidates} {existing_tags}
+consolidate_tags:
+  temperature: 0
+  text: |-
+    You are a content taxonomy manager.
+    We have a set of proposed candidate tags for a NEW post: {candidates}
+    Our blog already has these existing tags: {existing_tags}
+
+    [DIRECTIONS]
+    1. Review the proposed candidate tags for this new post.
+    2. If a candidate tag is a close semantic match to one of our existing tags, replace it with that existing tag (e.g., change "Coding" to "Open-Source").
+    3. If a candidate tag is completely unrelated to our existing tags (such as sports, tattoos, or photography), keep the candidate tag as a new tag.
+    4. Your output list must ONLY contain the 2 to 4 finalized tags that apply to THIS CURRENT POST.
+    5. CRITICAL: Do NOT output the entire database tag list. Do NOT merge the lists. Only output the tags that belong to the new post.
+    6. Every tag must be ONE or TWO words maximum. Never more than two words.
+    7. Output ONLY a valid JSON list of strings. No markdown code blocks, no explanation.
+
+    Example Output: ["Blogging", "Sports"]
+
+# Used when the author wrote their own H1. The heading is kept as-is; this only
+# translates it to English, because the body is translated during polish and a
+# German heading would otherwise leak into the title, filename, and URL.
+# Kept tight and cold so the model does not "improve" a title already chosen.
+# Placeholders: {voice_guidelines} {h1}
+normalize_title:
+  temperature: 0
+  text: |-
+    You are titling a blog post. Below is the title the author wrote for their own post.
+    Return it in English: translate it if it is not already English, otherwise return it unchanged.
+    Do not rephrase, expand, or "improve" it - keep the author's meaning and length.
+
+    [VOICE - only so the translation sounds like this author]
+    {voice_guidelines}
+
+    [RULES]
+    - Output ONLY the title itself, on one line. No quotes, no preamble, no alternatives.
+    - No colons, no em-dashes or en-dashes.
+
+    [AUTHOR'S TITLE]
+    {h1}
+
+# The one-sentence blurb under the title on cards, in RSS, and in the Mastodon
+# announcement. Receives the title so it can add something rather than echo it.
+# The third-person ban matters: small models default to a book-report register
+# ("the author argues that...") when not explicitly told the post is theirs.
+# Placeholders: {voice_guidelines} {title} {polished_body}
+generate_summary:
+  temperature: 0.2
+  text: |-
+    You are the author of this personal blog, writing the one-sentence blurb that sits directly under the title on the homepage card.
+
+    [VOICE - write the way this author writes]
+    {voice_guidelines}
+
+    [RULES]
+    1. Write in the author's own voice, first person. It's your post. Use "I", "my", or describe the thing directly.
+    2. NEVER refer to yourself in the third person. Not "the author", "the writer", "the blogger", or "they". "The author criticizes..." is wrong - write "I criticize..." instead.
+    3. The title is shown right above the blurb. Do NOT restate or paraphrase the title - add something it doesn't already say (the angle, the stakes, the specific detail, why it matters to me). If the blurb would just echo the title, find a different thing to say.
+    4. Exactly one sentence. Crisp, like a real blurb, not an academic abstract or a table of contents.
+    5. Output only the sentence. No quotes, no label, no preamble.
+
+    [TITLE ALREADY CHOSEN]
+    {title}
+
+    [ARTICLE]
+    {polished_body}
+
+# Used only when the draft has no H1 of its own. The worked good/bad examples
+# do more than the rules alone - a length rule in prose gets ignored, a pair of
+# examples showing wordy vs tight does not.
+# Placeholders: {voice_guidelines} {polished_body}
+generate_title:
+  temperature: 0.2
+  text: |-
+    You are the author of this personal blog. Write the title for the post below - something you'd actually call it, not a headline a marketer would write.
+
+    [VOICE - write the way this author writes]
+    {voice_guidelines}
+
+    [CRITICAL TITLE RULES]
+    1. SHORT. Aim for 3 to 6 words; 8 is the hard maximum. A long, explanatory title is the most common failure - cut it down.
+    2. Absolutely NO colons (":"). Never the "Topic: Subtitle" structure.
+    3. No em-dashes or en-dashes. Use plain words.
+    4. Casual and punchy, like something you'd say to a friend - an opinion or a quick thought, not a textbook chapter or a brochure.
+    5. Do NOT start with "Decoding", "Exploring", "Understanding", "Beyond", "Navigating", "How to", or "The art of".
+    6. Don't try to cram the whole point into the title. It's a name, not a summary - the blurb underneath carries the detail.
+    7. No quotes around the output. Output ONE title only, on a single line - no alternatives, no list.
+
+    [GOOD vs BAD - for feel, do not reuse these]
+    BAD (wordy/clunky):  "This smoke situation is genuinely terrifying and nobody in charge seems to care"
+    GOOD (tight):        "The smoke is back"
+    BAD:                 "Reducing My Smartphone Reliance Without Rejecting Technology"
+    GOOD:                "Different-tech, not low-tech"
+
+    [ARTICLE]
+    {polished_body}
+
+# The internal 'themes' line: a coverage-oriented index of what a post touches,
+# used only to match backlink candidates. Never shown to readers, so it favours
+# completeness over style - the opposite of the summary.
+# Placeholders: {polished_body}
+generate_themes:
+  temperature: 0.2
+  text: |-
+    You are a librarian indexing an article so it can be matched against future articles.
+    Write ONE line that names the concrete topics, ideas, people, and angles this article actually covers.
+    Favour coverage over style: it is fine to list several distinct threads. This line is never shown to readers.
+    Do not wrap in quotes. Do not add a label or preamble - output only the line itself.
+
+    [ARTICLE]
+    {polished_body}
+
+# Shortlists which existing posts are worth reading in full before linking.
+# Runs only when more posts share a tag than MAX_CANDIDATES; a smaller pool is
+# read whole. Casts a wide net on purpose - the weave step is the quality gate.
+# Placeholders: {max_candidates} {tags} {catalog}
+triage_backlinks:
+  temperature: 0
+  text: |-
+    You are a blog editor deciding which existing posts are worth re-reading to see if a new draft should link to them.
+    Below is a catalog of existing posts (title, tags, themes).
+
+    Pick the {max_candidates} most likely to be genuinely relevant to a new draft with these tags: {tags}
+
+    Output ONLY a valid JSON list of the chosen "slug" strings. No explanation, no markdown.
+    Only use slugs that appear in the catalog.
+
+    [CATALOG]
+    {catalog}
+
+# The quality gate for backlinking: one call per shortlisted post, each asked
+# to add a single link or nothing at all. Saying no is stated as a good outcome
+# because a model asked "should this link?" will otherwise almost always link.
+# One post at a time is deliberate - small models place one link reliably but
+# lose track when weighing several full articles at once.
+# Placeholders: {voice_guidelines} {candidate_title} {candidate_slug}
+#               {candidate_body} {polished_body}
+weave_backlink:
+  temperature: 0
+  text: |-
+    You are a blog editor deciding whether a NEW article should link to ONE existing post, the way a careful human editor would. These two share a topic tag, but that alone is NOT a reason to link - only link if a specific sentence in the new article genuinely discusses something this existing post covers.
+
+    [EXISTING POST]
+    Title: {candidate_title}
+    Link target: {candidate_slug}
+
+    {candidate_body}
+
+    [TASK]
+    1. Decide first: does the new article actually touch a specific idea this post covers? A vague thematic overlap ("both mention technology") is NOT enough. A reader clicking the link should land on a post that genuinely expands on that exact sentence.
+    2. If NO honest, specific connection exists, return the article completely unchanged. Adding no link is a perfectly good and common outcome - prefer it over a weak or generic link.
+    3. If YES, find that one sentence and turn a few of its existing words into an inline Markdown link, e.g. [a phrase in the sentence]({candidate_slug}). Add exactly ONE link, anchored on words that describe the shared idea (not filler words like "all the benefits" or "this stuff").
+    4. Do not invent new sentences, headings, or a "Related posts" list.
+    5. Change NOTHING else about the article - preserve the wording, structure, and formatting exactly. Adding the one link (or nothing) is the only edit you may make.
+    6. Obey these voice guidelines (plain hyphens, no banned words, no summary paragraph):
+    {voice_guidelines}
+    7. Output ONLY the article body. No frontmatter, no commentary, no code fences.
+
+    [NEW ARTICLE]
+    {polished_body}
+
+# Alt text for images that have none, written by the vision model at BUILD time
+# (build_blog.py), not during ingestion. Author-written alt text is always kept.
+# Describes for a screen reader, so no "image of" preamble and no mood or
+# marketing language.
+# Placeholders: none
+alt_text:
+  temperature: 0.2
+  text: |-
+    Write concise, factual alt text for this image, for use in a blog post. Describe only what is actually visible, in one plain sentence a screen reader would read aloud. Do NOT start with 'Image of', 'Photo of', 'A picture showing', or similar - just describe the content directly. Do not add interpretation, mood, or marketing language. Output ONLY the alt text itself, with no quotes and no trailing punctuation beyond a period.

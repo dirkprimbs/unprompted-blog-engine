@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Self-hosted favicons (static/favicon.*): the writing-hand emoji (U+270D)
+         shipped as real artwork. It used to be a <text>✍️</text> SVG data-URI,
+         which relies on the reader's emoji font - Blink draws it, WebKit (all
+         iOS browsers) does not, so the tab was blank on iPhone/iPad. Same hand,
+         now as an .ico/.svg/PNG set every browser can render. -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    
+    <link rel="alternate" type="application/rss+xml" title="%SITE_NAME% RSS Feed" href="%SITE_URL%/feed.xml" />
+    %ALT_FEED_LINK%
+
+    <!-- Preload the two faces used above the fold. Without these the browser
+         only discovers them after parsing fonts.css - a three-hop chain
+         (html -> fonts.css -> woff2) that lands the real font late enough to
+         reflow the page under the reader, which is most of this site's
+         layout shift. Everything else in fonts.css still loads on demand.
+         crossorigin is required on font preloads even same-origin: fonts are
+         fetched in CORS mode, and a preload without it is simply ignored and
+         fetched a second time.
+
+         Only the two Plus Jakarta Sans weights are preloaded. They set the
+         header and every heading and card on all three page types, and they
+         are the two faces Lighthouse named as the cause of the measured shift.
+         Source Serif is deliberately left out: it is 122 KB and only article
+         bodies use it, so preloading it would slow the homepage down to speed
+         one page type up. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="/fonts/plus-jakarta-sans-400-normal-latin.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="/fonts/plus-jakarta-sans-700-normal-latin.woff2">
+
+    <!-- Self-hosted fonts (see fetch_fonts.py) - no request to Google on load.
+         The ?v= on these links is a content hash of the theme files, which is
+         what lets them be cached for a year (see _asset_version()). -->
+    <link rel="stylesheet" href="/fonts.css?v=%ASSET_V%">
+    <!-- Site styles live in one file so a tweak re-uploads only style.css, not
+         every page. See static/style.css. -->
+    <link rel="stylesheet" href="/style.css?v=%ASSET_V%">
+
+    <!-- Resolve the reader's theme BEFORE first paint to avoid a flash. Reads
+         their saved choice (localStorage, on-device only - not a cookie, never
+         sent anywhere); with no saved choice it follows the OS setting.
+
+         Two attributes go on <html>, because one can't carry both facts:
+           data-theme="dark"  - the RESOLVED colour scheme. All theming in
+                                style.css keys off this and nothing else.
+           data-theme-mode    - the reader's CHOICE: auto, light, or dark.
+                                Needed because "auto that resolved to light"
+                                and "explicitly light" paint identically but
+                                must show different toggle icons.
+         Only 'light' and 'dark' are ever stored; anything else (including an
+         absent key, and any stale value) means auto, so the default and the
+         auto choice are the same state and a bad value self-heals. -->
+    <script>
+        (function () {
+            var mode = 'auto';
+            try {
+                var saved = localStorage.getItem('theme');
+                if (saved === 'light' || saved === 'dark') mode = saved;
+            } catch (e) {}
+            var dark = mode === 'dark' || (mode === 'auto' &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches);
+            var root = document.documentElement;
+            root.setAttribute('data-theme-mode', mode);
+            if (dark) root.setAttribute('data-theme', 'dark');
+        })();
+    </script>
+
+    <title>%PAGE_TITLE%</title>
+    <meta name="description" content="%META_DESCRIPTION%">
+    
+    <meta property="og:type" content="%OG_TYPE%">
+    <meta property="og:title" content="%PAGE_TITLE%">
+    <meta property="og:description" content="%META_DESCRIPTION%">
+    <meta property="og:url" content="%SITE_URL%/%PAGE_SLUG%">
+    <meta property="og:site_name" content="%SITE_NAME%">
+    %OG_IMAGE_TAGS%
+    <meta name="twitter:title" content="%PAGE_TITLE%">
+    <meta name="twitter:description" content="%META_DESCRIPTION%">
+
+    <meta name="fediverse:creator" content="%FEDIVERSE_CREATOR%">
+    
+    %STRUCTURED_DATA%
+
+</head>
+<body>
+    <header>
+        <div class="nav-container">
+            <div>
+                <a href="/" class="logo">%SITE_NAME%</a>
+                <div class="header-links">
+                    <!-- No target="_blank": links.about now points at this
+                         site's own /about.html. Set it back if you point it at
+                         an off-site profile again. -->
+                    <a href="%LINK_ABOUT%">About</a>
+                    <a href="%LINK_MASTODON%" target="_blank" rel="me noopener">Mastodon</a>
+                    <!-- Whole element, not just an href: links.bluesky is
+                         optional and renders as nothing when unset. -->
+                    %LINK_BLUESKY_ITEM%
+                    <a href="mailto:%AUTHOR_EMAIL%">Contact</a>
+                    <a href="/feed.xml" target="_blank" style="display: inline-flex; align-items: center; gap: 5px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg>RSS
+                    </a>
+                    <button type="button" class="theme-toggle" aria-label="Theme: follow system. Click for light." title="Theme: follow system. Click for light.">
+                        <svg class="icon-auto" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                    </button>
+                </div>
+            </div>
+            <!-- Local, in-browser full-text search. No third party: the index
+                 (/search-index.json) is built from the posts and searched
+                 client-side by /search.js, which is lazy-loaded on first use. -->
+            <div class="search-form" role="search">
+                <!-- role="combobox" is load-bearing, not decoration: an
+                     <input type="search"> is a plain searchbox, and a searchbox
+                     may not carry aria-expanded. Without the role the attribute
+                     search.js maintains is invalid and screen readers ignore
+                     it, so the results list opens and closes silently. The
+                     combobox role is what makes the input + role="listbox"
+                     popup below a single announced widget. -->
+                <input type="search" id="site-search" class="search-input"
+                       role="combobox" placeholder="Search..." autocomplete="off"
+                       aria-label="Search articles" aria-controls="search-results"
+                       aria-expanded="false">
+                <div id="search-results" class="search-results" role="listbox"
+                     aria-label="Search results" hidden></div>
+            </div>
+        </div>
+    </header>
+    <div class="container">
+        %MAIN_CONTENT%
+    </div>
+    <footer class="site-footer">
+        <div class="ai-label">%AI_LABEL%</div>
+        <div class="ai-explainer">%AI_EXPLAINER% <br/>Learn more at <a href="%AI_EXPLAINER_URL%" target="_blank" rel="noopener">%AI_EXPLAINER_URL%</a></div>
+    </footer>
+    <script>
+        // Swap a YouTube facade for the real player only on user interaction,
+        // so no YouTube cookies/JS load on a plain page view.
+        (function () {
+            function play(el) {
+                var id = el.getAttribute('data-yt');
+                if (!id || el.dataset.loaded) return;
+                el.dataset.loaded = '1';
+                var iframe = document.createElement('iframe');
+                iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+                iframe.setAttribute('allowfullscreen', '');
+                iframe.setAttribute('title', 'YouTube video player');
+                iframe.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1';
+                el.innerHTML = '';
+                el.appendChild(iframe);
+            }
+            document.addEventListener('click', function (e) {
+                var el = e.target.closest('.yt-facade');
+                if (el) play(el);
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                var el = e.target.closest('.yt-facade');
+                if (el) { e.preventDefault(); play(el); }
+            });
+        })();
+    </script>
+    <script>
+        // Theme toggle, cycling auto -> light -> dark -> auto. The theme is
+        // already resolved before paint by the inline script in <head>; here we
+        // let the reader change it and remember the choice on-device
+        // (localStorage - not a cookie, never sent to a server).
+        //
+        // The button shows the mode currently IN EFFECT, not the one a click
+        // would select: with three states "what's next" isn't guessable from an
+        // icon, and auto has to be visible as its own state or the reader can't
+        // tell whether the page is following their system at all. The label
+        // spells out both halves - what it is now, and what clicking does.
+        (function () {
+            var btn = document.querySelector('.theme-toggle');
+            if (!btn) return;
+            var root = document.documentElement;
+            var media = window.matchMedia('(prefers-color-scheme: dark)');
+            var NEXT = { auto: 'light', light: 'dark', dark: 'auto' };
+            var LABEL = {
+                auto: 'Theme: follow system. Click for light.',
+                light: 'Theme: light. Click for dark.',
+                dark: 'Theme: dark. Click to follow system.'
+            };
+
+            function mode() {
+                var m = root.getAttribute('data-theme-mode');
+                return NEXT[m] ? m : 'auto';   // unknown/absent means auto
+            }
+
+            function apply(m) {
+                root.setAttribute('data-theme-mode', m);
+                if (m === 'dark' || (m === 'auto' && media.matches)) {
+                    root.setAttribute('data-theme', 'dark');
+                } else {
+                    root.removeAttribute('data-theme');
+                }
+                btn.setAttribute('aria-label', LABEL[m]);
+                btn.setAttribute('title', LABEL[m]);
+            }
+
+            // Sync the label with whatever the pre-paint script resolved.
+            apply(mode());
+
+            btn.addEventListener('click', function () {
+                var next = NEXT[mode()];
+                try {
+                    // Auto is stored as "no preference", so it's identical to a
+                    // reader who never touched the toggle.
+                    if (next === 'auto') localStorage.removeItem('theme');
+                    else localStorage.setItem('theme', next);
+                } catch (e) {}
+                apply(next);
+            });
+
+            // While on auto, follow the OS if it flips (e.g. a scheduled switch
+            // to dark at sunset) without needing a reload.
+            function onSystemChange() { if (mode() === 'auto') apply('auto'); }
+            if (media.addEventListener) media.addEventListener('change', onSystemChange);
+            else if (media.addListener) media.addListener(onSystemChange);  // Safari < 14
+        })();
+    </script>
+
+    <!-- Local full-text search (see the search box in the header). Deferred and
+         same-origin; it fetches /search-index.json only on first interaction. -->
+    <script src="/search.js?v=%ASSET_V%" defer></script>
+
+    <!-- Comments, blended from Mastodon and Bluesky (see static/comments.js).
+         Emitted only on pages that actually carry a thread, so the homepage and
+         tag pages never fetch it. Nothing loads until the reader clicks. -->
+    %COMMENTS_SCRIPT%
+</body>
+</html>

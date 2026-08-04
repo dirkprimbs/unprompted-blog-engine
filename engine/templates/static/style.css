@@ -1,0 +1,836 @@
+/* ---------------------------------------------------------------------------
+   Site styles for Dirk Primbs Unprompted.
+
+   Extracted from templates/base.html so a style tweak touches ONE file instead
+   of being inlined into every generated page (which made lftp re-upload the
+   whole site on any change). Served from /style.css exactly like /fonts.css.
+
+   Theming is driven entirely by the CSS custom properties in :root. Dark mode
+   is applied by setting data-theme="dark" on <html> (done by the no-flash
+   script in base.html, which resolves the reader's saved choice or their OS
+   setting before first paint). Never hardcode a color below — add a variable.
+
+   <html> also carries data-theme-mode="auto|light|dark" — the reader's choice
+   rather than the resolved scheme. Only the toggle's own icon rules read it;
+   everything else keys off data-theme, so colours stay a single source.
+--------------------------------------------------------------------------- */
+
+:root {
+    color-scheme: light;
+    --text-main: #242424;
+    --text-muted: #6B6B6B;
+    --text-quote: rgba(41, 41, 41, 0.8);
+    --accent: #0C7C74;            /* deep teal-green, sampled from the avatar */
+    --accent-fg: #FFFFFF;         /* text/icon on an --accent fill */
+    --bg: #FFFFFF;
+    --header-bg: rgba(255, 255, 255, 0.95);
+    --border: #F2F2F2;
+    --surface: #FAFAFA;           /* subtly raised bg: inputs, code blocks, pills */
+    --surface-strong: #F2F2F2;    /* tag badges, inline code */
+    --surface-hover: #E5E5E5;
+    --code-inline: #C2255C;
+    --hll: #ffffcc;               /* highlighted code line */
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --text-main: #E6E6E6;
+    --text-muted: #9B9B9B;
+    --text-quote: rgba(230, 230, 230, 0.8);
+    --accent: #44A49C;            /* same tone from the avatar, lightened for dark */
+    --accent-fg: #181818;
+    --bg: #181818;                /* grey, not pure black */
+    --header-bg: rgba(24, 24, 24, 0.95);
+    --border: #2E2E2E;
+    --surface: #222222;
+    --surface-strong: #2A2A2A;
+    --surface-hover: #333333;
+    --code-inline: #FF7EB6;
+    --hll: #3A3A1A;
+}
+
+body {
+    font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--text-main);
+    background-color: var(--bg);
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+header {
+    border-bottom: 1px solid var(--border);
+    padding: 15px 20px;
+    position: sticky;
+    top: 0;
+    background: var(--header-bg);
+    backdrop-filter: blur(5px);
+    z-index: 100;
+}
+.nav-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.nav-container > div {
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+}
+.logo {
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    text-decoration: none;
+    color: var(--text-main);
+}
+.header-links {
+    display: flex;
+    gap: 15px;
+    font-size: 14px;
+    align-items: center;
+}
+.header-links a {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+.header-links a:hover {
+    color: var(--accent);
+}
+
+/* --- THEME TOGGLE (auto / light / dark) --- */
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    margin: 0;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 0;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+.theme-toggle:hover {
+    color: var(--accent);
+    background: var(--surface-strong);
+}
+/* The button shows the mode in effect, so the icon keys off data-theme-mode
+   (the reader's choice), NOT data-theme (the resolved colours) - auto and
+   explicit-light both paint light and would otherwise be indistinguishable.
+   The auto icon is the default, so with no attribute set (JS disabled, or
+   before the pre-paint script runs) the button still shows the truth: no
+   saved preference, following the system. */
+.theme-toggle svg { display: none; }
+.theme-toggle .icon-auto { display: block; }
+:root[data-theme-mode="light"] .theme-toggle .icon-auto,
+:root[data-theme-mode="dark"] .theme-toggle .icon-auto { display: none; }
+:root[data-theme-mode="light"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme-mode="dark"] .theme-toggle .icon-moon { display: block; }
+
+.container {
+    max-width: 760px;
+    margin: 50px auto;
+    padding: 0 20px;
+}
+h1 {
+    font-size: 42px;
+    line-height: 1.2;
+    letter-spacing: -1px;
+    margin-bottom: 10px;
+}
+.meta {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 35px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.meta a.tag-badge {
+    background: var(--surface-strong);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--text-main);
+    text-decoration: none;
+    transition: background 0.2s ease;
+}
+.meta a.tag-badge:hover {
+    background: var(--surface-hover);
+    color: var(--accent);
+}
+.article-content {
+    font-family: "Source Serif 4", Georgia, Cambria, serif;
+    font-size: 20px;
+    line-height: 1.65;
+    color: var(--text-main);
+    letter-spacing: -0.003em;
+}
+.article-content p { margin-bottom: 24px; }
+.article-content h2 { font-size: 26px; margin-top: 40px; letter-spacing: -0.5px; font-family: "Plus Jakarta Sans", sans-serif; }
+.article-content h3 { font-size: 22px; margin-top: 30px; font-family: "Plus Jakarta Sans", sans-serif; }
+.article-content a { color: var(--text-main); text-decoration: underline; text-underline-offset: 4px; }
+.article-content a:hover { color: var(--accent); }
+
+.article-content img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 30px auto;
+    border-radius: 4px;
+}
+
+/* Consecutive images (no blank line between them in Markdown, so they land in
+   one paragraph) render as a responsive row; a blank line keeps them stacked
+   full-width. The row collapses to a single full-width column on narrow
+   screens, so nothing shrinks to mush on a phone. */
+.article-content p:has(img + img) {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin: 30px auto;
+}
+.article-content p:has(img + img) img {
+    margin: 0;
+    flex: 1 1 0;
+    min-width: 0;
+}
+@media (max-width: 600px) {
+    .article-content p:has(img + img) { display: block; }
+    .article-content p:has(img + img) img { margin: 20px auto; }
+}
+
+.post-card {
+    border-bottom: 1px solid var(--border);
+    padding: 25px 0;
+    display: flex;
+    flex-direction: column;
+}
+.post-card h2 { margin: 0 0 8px 0; font-size: 22px; line-height: 1.3; }
+.post-card h2 a { text-decoration: none; color: var(--text-main); }
+.post-card h2 a:hover { color: var(--text-muted); }
+.post-card .summary { color: var(--text-muted); font-size: 16px; margin: 0 0 12px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.search-form {
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+.search-input {
+    border: 1px solid var(--border);
+    background-color: var(--surface);
+    color: var(--text-main);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+    outline: none;
+    width: 160px;
+    transition: width 0.2s ease, background-color 0.2s ease;
+}
+.search-input:focus {
+    width: 220px;
+    background-color: var(--bg);
+    border-color: var(--text-muted);
+}
+
+/* Client-side search results dropdown (see static/search.js). */
+.search-results {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(360px, 90vw);
+    max-height: 70vh;
+    overflow-y: auto;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    z-index: 1000;
+    padding: 6px;
+}
+.search-hit {
+    display: block;
+    padding: 10px 12px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--text-main);
+}
+.search-hit:hover,
+.search-hit:focus {
+    background-color: var(--surface-hover);
+}
+.search-hit-title {
+    display: block;
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 2px;
+}
+.search-hit-snippet {
+    display: block;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.4;
+}
+.search-empty {
+    margin: 0;
+    padding: 10px 12px;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.tag-cloud-container {
+    margin: 30px 0 40px 0;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+}
+.tag-cloud-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 15px;
+}
+.tag-cloud {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.tag-cloud a.tag-pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 14px;
+    color: var(--text-main);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+.tag-cloud a.tag-pill:hover {
+    border-color: var(--text-muted);
+    background: var(--bg);
+    color: var(--accent);
+}
+.tag-count {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-left: 4px;
+}
+
+/* COLLAPSIBLE TAGS STYLING */
+details.more-tags {
+    width: 100%;
+    margin-top: 10px;
+}
+details.more-tags summary {
+    font-size: 13px;
+    color: var(--accent);
+    cursor: pointer;
+    outline: none;
+    user-select: none;
+    margin-bottom: 10px;
+}
+details.more-tags summary:hover {
+    text-decoration: underline;
+}
+.tags-hidden-wrapper {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-top: 5px;
+}
+
+/* Per-tag "Subscribe" RSS link in a tag page's heading. */
+.feed-subscribe {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    vertical-align: middle;
+    margin-left: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 12px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+}
+.feed-subscribe:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+/* PAGINATION NAV STYLING */
+.pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 35px;
+    font-size: 15px;
+}
+.pagination a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+}
+.pagination a:hover {
+    text-decoration: underline;
+}
+.pagination .disabled {
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+/* --- ARTICLE ADJACENCY NAVIGATION --- */
+.article-nav-bounds {
+    margin-top: 60px;
+    padding-top: 30px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+}
+.article-nav-block {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    text-decoration: none !important;
+}
+.article-nav-block.next {
+    text-align: right;
+}
+.article-nav-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+.article-nav-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-main);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.article-nav-block:hover .article-nav-title {
+    color: var(--accent);
+}
+
+/* --- TABLES --- */
+.article-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 35px 0;
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+}
+.article-content th {
+    border-bottom: 2px solid var(--text-main);
+    text-align: left;
+    padding: 12px 10px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+.article-content td {
+    border-bottom: 1px solid var(--border);
+    padding: 12px 10px;
+    color: var(--text-muted);
+}
+.article-content tr:hover td {
+    color: var(--text-main);
+}
+
+/* --- SITE FOOTER / AI TRANSPARENCY LABEL --- */
+.site-footer {
+    max-width: 760px;
+    margin: 60px auto 40px auto;
+    padding: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+.site-footer .ai-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-main);
+}
+.site-footer .ai-explainer {
+    margin-top: 2px;
+}
+.site-footer a {
+    color: var(--accent);
+    text-decoration: none;
+}
+.site-footer a:hover {
+    text-decoration: underline;
+}
+
+/* --- BLOCKQUOTES --- */
+.article-content blockquote {
+    border-left: 3px solid var(--text-main);
+    padding-left: 20px;
+    margin: 35px 0;
+    font-style: italic;
+    color: var(--text-quote);
+}
+
+/* --- CODE BLOCKS WITH SYNTAX COLORING --- */
+.article-content pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 35px 0;
+}
+.article-content pre code {
+    font-family: "Space Mono", SFMono-Regular, Consolas, monospace;
+    font-size: 15px;
+    line-height: 1.5;
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+}
+.article-content :not(pre) > code {
+    font-family: "Space Mono", SFMono-Regular, Consolas, monospace;
+    background: var(--surface-strong);
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 15px;
+    color: var(--code-inline);
+}
+
+/* Pygments Light Color Matrix (.codehilite map) */
+.codehilite .hll { background-color: var(--hll) }
+.codehilite .c   { color: #727272; font-style: italic }
+.codehilite .err { color: #a61717; background-color: #e3d2d2 }
+.codehilite .k   { color: #1A8917; font-weight: bold }
+.codehilite .o   { color: #242424 }
+.codehilite .ch  { color: #727272; font-style: italic }
+.codehilite .cm  { color: #727272; font-style: italic }
+.codehilite .cp  { color: #008080 }
+.codehilite .cpf { color: #727272; font-style: italic }
+.codehilite .c1  { color: #727272; font-style: italic }
+.codehilite .cs  { color: #727272; font-style: italic }
+.codehilite .gd  { color: #000000; background-color: #ffdddd }
+.codehilite .ge  { color: #000000; font-style: italic }
+.codehilite .gr  { color: #aa0000 }
+.codehilite .gh  { color: #999999 }
+.codehilite .gi  { color: #000000; background-color: #ddffdd }
+.codehilite .go  { color: #888888 }
+.codehilite .gp  { color: #555555 }
+.codehilite .gs  { font-weight: bold }
+.codehilite .gu  { color: #aaaaaa }
+.codehilite .gt  { color: #aa0000 }
+.codehilite .kc  { color: #1A8917; font-weight: bold }
+.codehilite .kd  { color: #1A8917; font-weight: bold }
+.codehilite .kn  { color: #1A8917; font-weight: bold }
+.codehilite .kp  { color: #1A8917; font-weight: bold }
+.codehilite .kr  { color: #1A8917; font-weight: bold }
+.codehilite .kt  { color: #445588; font-weight: bold }
+.codehilite .m   { color: #009999 }
+.codehilite .s   { color: #b85c00 }
+.codehilite .na  { color: #008080 }
+.codehilite .nb  { color: #0086B3 }
+.codehilite .nc  { color: #445588; font-weight: bold }
+.codehilite .no  { color: #008080 }
+.codehilite .nd  { color: #3c5d5d; font-weight: bold }
+.codehilite .ni  { color: #800080 }
+.codehilite .ne  { color: #990000; font-weight: bold }
+.codehilite .nf  { color: #0044dd; font-weight: bold }
+.codehilite .nl  { color: #990000; font-weight: bold }
+.codehilite .nn  { color: #555555 }
+.codehilite .nt  { color: #000080 }
+.codehilite .nv  { color: #008080 }
+.codehilite .ow  { color: #000000; font-weight: bold }
+.codehilite .w   { color: #bbbbbb }
+.codehilite .mb  { color: #009999 }
+.codehilite .mf  { color: #009999 }
+.codehilite .mh  { color: #009999 }
+.codehilite .mi  { color: #009999 }
+.codehilite .mo  { color: #009999 }
+.codehilite sa  { color: #b85c00 }
+.codehilite .sb  { color: #b85c00 }
+.codehilite .sc  { color: #b85c00 }
+.codehilite .dl  { color: #b85c00 }
+.codehilite .sd  { color: #b85c00; font-style: italic }
+.codehilite .s2  { color: #b85c00 }
+.codehilite .se  { color: #b85c00 }
+.codehilite .sh  { color: #b85c00 }
+.codehilite .si  { color: #b85c00 }
+.codehilite .sx  { color: #b85c00 }
+.codehilite .sr  { color: #009926 }
+.codehilite .s1  { color: #b85c00 }
+.codehilite .ss  { color: #990073 }
+.codehilite .bp  { color: #999999 }
+.codehilite .fm  { color: #0044dd; font-weight: bold }
+.codehilite .vc  { color: #008080 }
+.codehilite .vg  { color: #008080 }
+.codehilite .vi  { color: #008080 }
+.codehilite .vm  { color: #008080 }
+.codehilite .il  { color: #009999 }
+
+/* Pygments Dark override — a light syntax theme on a dark background is the
+   ugliest failure mode, so remap the token palette when data-theme="dark". */
+:root[data-theme="dark"] .codehilite .err { color: #E06C75; background-color: transparent }
+:root[data-theme="dark"] .codehilite .c,
+:root[data-theme="dark"] .codehilite .ch,
+:root[data-theme="dark"] .codehilite .cm,
+:root[data-theme="dark"] .codehilite .cpf,
+:root[data-theme="dark"] .codehilite .c1,
+:root[data-theme="dark"] .codehilite .cs { color: #7F848E; font-style: italic }
+:root[data-theme="dark"] .codehilite .cp { color: #56B6C2 }
+:root[data-theme="dark"] .codehilite .k,
+:root[data-theme="dark"] .codehilite .kc,
+:root[data-theme="dark"] .codehilite .kd,
+:root[data-theme="dark"] .codehilite .kn,
+:root[data-theme="dark"] .codehilite .kp,
+:root[data-theme="dark"] .codehilite .kr { color: #C678DD; font-weight: bold }
+:root[data-theme="dark"] .codehilite .kt,
+:root[data-theme="dark"] .codehilite .nc,
+:root[data-theme="dark"] .codehilite .nn,
+:root[data-theme="dark"] .codehilite .ni,
+:root[data-theme="dark"] .codehilite .bp { color: #E5C07B }
+:root[data-theme="dark"] .codehilite .o,
+:root[data-theme="dark"] .codehilite .ow,
+:root[data-theme="dark"] .codehilite .nb { color: #56B6C2 }
+:root[data-theme="dark"] .codehilite .m,
+:root[data-theme="dark"] .codehilite .mb,
+:root[data-theme="dark"] .codehilite .mf,
+:root[data-theme="dark"] .codehilite .mh,
+:root[data-theme="dark"] .codehilite .mi,
+:root[data-theme="dark"] .codehilite .mo,
+:root[data-theme="dark"] .codehilite .il,
+:root[data-theme="dark"] .codehilite .na,
+:root[data-theme="dark"] .codehilite .no,
+:root[data-theme="dark"] .codehilite .nv,
+:root[data-theme="dark"] .codehilite .vc,
+:root[data-theme="dark"] .codehilite .vg,
+:root[data-theme="dark"] .codehilite .vi,
+:root[data-theme="dark"] .codehilite .vm { color: #D19A66 }
+:root[data-theme="dark"] .codehilite .s,
+:root[data-theme="dark"] .codehilite .sa,
+:root[data-theme="dark"] .codehilite .sb,
+:root[data-theme="dark"] .codehilite .sc,
+:root[data-theme="dark"] .codehilite .dl,
+:root[data-theme="dark"] .codehilite .sd,
+:root[data-theme="dark"] .codehilite .s2,
+:root[data-theme="dark"] .codehilite .se,
+:root[data-theme="dark"] .codehilite .sh,
+:root[data-theme="dark"] .codehilite .si,
+:root[data-theme="dark"] .codehilite .sx,
+:root[data-theme="dark"] .codehilite .sr,
+:root[data-theme="dark"] .codehilite .s1 { color: #98C379 }
+:root[data-theme="dark"] .codehilite .ss { color: #C678DD }
+:root[data-theme="dark"] .codehilite .nf,
+:root[data-theme="dark"] .codehilite .fm,
+:root[data-theme="dark"] .codehilite .nd { color: #61AFEF }
+:root[data-theme="dark"] .codehilite .nt,
+:root[data-theme="dark"] .codehilite .ne,
+:root[data-theme="dark"] .codehilite .nl { color: #E06C75 }
+:root[data-theme="dark"] .codehilite .gd { color: #E6E6E6; background-color: #3A1C1C }
+:root[data-theme="dark"] .codehilite .gi { color: #E6E6E6; background-color: #1C3A1C }
+:root[data-theme="dark"] .codehilite .gr,
+:root[data-theme="dark"] .codehilite .gt { color: #E06C75 }
+:root[data-theme="dark"] .codehilite .gh { color: #61AFEF }
+:root[data-theme="dark"] .codehilite .gu { color: #56B6C2 }
+:root[data-theme="dark"] .codehilite .go,
+:root[data-theme="dark"] .codehilite .gp { color: #9B9B9B }
+:root[data-theme="dark"] .codehilite .w { color: #3A3A3A }
+
+/* Click-to-play YouTube facade: shows the thumbnail only, and loads
+   YouTube's iframe (and its cookies/JS) exclusively after a click. */
+.yt-facade {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    margin: 1.5em 0;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    background: #000;
+}
+.yt-facade .yt-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.yt-facade .yt-play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 68px;
+    height: 48px;
+    border-radius: 12px;
+    background: rgba(20, 20, 20, 0.75);
+    transition: background 0.15s ease;
+}
+.yt-facade:hover .yt-play,
+.yt-facade:focus-visible .yt-play { background: var(--accent); }
+.yt-facade .yt-play::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-40%, -50%);
+    border-style: solid;
+    border-width: 11px 0 11px 19px;
+    border-color: transparent transparent transparent #fff;
+}
+.yt-facade iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+/* Mastodon-powered comments (loaded client-side on click). */
+.comments {
+    margin: 3em 0 1em;
+    padding-top: 1.5em;
+    border-top: 1px solid var(--border);
+}
+.comments-title { margin: 0 0 0.25em; }
+.comments-intro { color: var(--text-muted); margin: 0 0 1em; font-size: 0.95em; }
+.comments-load {
+    font: inherit;
+    font-weight: 600;
+    color: var(--accent-fg);
+    background: var(--accent);
+    border: 0;
+    border-radius: 999px;
+    padding: 8px 18px;
+    cursor: pointer;
+}
+.comments-load:hover { filter: brightness(0.93); }
+.comments-load[disabled] { opacity: 0.6; cursor: default; }
+.comments-status { color: var(--text-muted); font-size: 0.95em; margin: 1em 0; }
+.comment {
+    display: flex;
+    gap: 12px;
+    padding: 1em 0;
+    border-top: 1px solid var(--border);
+}
+.comment.comment-reply { margin-left: 2em; }
+.comment-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
+    background: var(--border);
+}
+.comment-body { flex: 1; min-width: 0; }
+.comment-head { font-size: 0.9em; margin-bottom: 0.25em; }
+.comment-author { font-weight: 600; color: var(--text-main); text-decoration: none; }
+.comment-author:hover { text-decoration: underline; }
+.comment-instance { color: var(--text-muted); }
+.comment-op-badge {
+    display: inline-block;
+    font-size: 0.72em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 0 5px;
+    margin-left: 4px;
+    vertical-align: 1px;
+}
+/* Origin badge. Replies from both networks blend into one chronological list,
+   so this is what stops two different handle formats reading as a bug. Muted
+   rather than accent-coloured: it should be findable, not competing with the
+   OP badge beside it. */
+.comment-network {
+    display: inline-block;
+    font-size: 0.72em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 5px;
+    margin-left: 6px;
+    vertical-align: 1px;
+}
+.comment-date { color: var(--text-muted); text-decoration: none; }
+.comment-date:hover { text-decoration: underline; }
+.comment-content { line-height: 1.55; }
+.comment-content p:first-child { margin-top: 0; }
+.comment-content p:last-child { margin-bottom: 0; }
+.comment-content img.emoji {
+    height: 1.1em;
+    width: auto;
+    vertical-align: -0.15em;
+    display: inline;
+}
+.comment-favs {
+    display: inline-block;
+    margin-top: 0.4em;
+    font-size: 0.85em;
+    color: var(--text-muted);
+    text-decoration: none;
+}
+.comment-favs:hover { text-decoration: underline; }
+
+/* ---------------------------------------------------------------------------
+   Standalone pages (about, colophon): rendered from content_pipeline/pages/
+   through the same base.html as everything else, so they only need the few
+   bits an article doesn't have.
+--------------------------------------------------------------------------- */
+.page-content > h1:first-of-type { margin-bottom: 0.6em; }
+
+.about-portrait {
+    float: right;
+    width: 180px;
+    max-width: 40%;
+    margin: 0 0 1.5em 1.75em;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+@media (max-width: 600px) {
+    /* Floating it beside two lines of text looks cramped on a phone; centre it
+       above the prose instead. */
+    .about-portrait {
+        float: none;
+        display: block;
+        width: 150px;
+        max-width: 60%;
+        margin: 0 auto 1.5em;
+    }
+}
+
+/* Optional per-tag emoji (display.tag_emoji in site.yaml). Decorative only -
+   the markup carries aria-hidden, so this just needs spacing. */
+.tag-emoji {
+    margin-right: 0.3em;
+    font-style: normal;
+    /* Most emoji are colour glyphs and ignore this, but a few have a
+       text-presentation fallback that would inherit the link's hover colour.
+       Pin it to the body colour so those stay legible in both themes - NOT
+       'initial', which resolves to black and disappears on the dark theme. */
+    color: var(--text-main);
+}

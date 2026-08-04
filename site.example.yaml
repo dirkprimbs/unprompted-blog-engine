@@ -1,0 +1,125 @@
+# Site identity and presentation.
+#
+# Copy this file to site.yaml and make it yours - publish.sh does that for you
+# on first run if site.yaml is missing. Your site.yaml is gitignored, the same
+# way VOICE.md and publish.local.sh are, so the engine stays reusable and your
+# identity is not something a fork inherits by accident.
+#
+# Everything reader-facing that names you or your site lives here. Nothing in
+# engine/*.py or engine/templates/base.html hardcodes it - which matters most
+# for the values you cannot see in a browser, like the JSON-LD author and the
+# og:image:alt text that search engines and social scrapers actually read.
+
+site:
+  # Shown in the header, the browser tab, both RSS feeds, and og:site_name.
+  name: "Example Unprompted"
+
+  # Canonical base URL. No trailing slash. Every internal link, the sitemap,
+  # both feeds, and the announcement toot are built from this, so it must match
+  # where the site is really served or links will point at the wrong host.
+  url: "https://blog.example.com"
+
+  # Meta description for the homepage and tag pages.
+  description: "Personal thoughts, essays, and notes."
+
+  # Description for the site-wide RSS feed. Usually a slightly fuller version
+  # of the above - it is read in feed readers, away from the site's own design.
+  feed_description: "Personal thoughts, essays, and notes."
+
+author:
+  # Used for the JSON-LD BlogPosting author on every article. This is the field
+  # search engines attribute the writing to, so it is the one most worth
+  # changing and the easiest to forget - it never appears on screen.
+  name: "Your Name"
+
+  # Linked from the "Contact" item in the header.
+  email: "you@example.com"
+
+links:
+  # The header's "About" link. Anything you want: a LinkedIn profile, an
+  # about page on this site, a personal homepage.
+  about: "https://example.com/about"
+
+  # The header's "Mastodon" link. Rendered with rel="me", which is what lets
+  # your Mastodon profile verify the link back to this site.
+  mastodon: "https://mastodon.social/@example"
+
+  # Sets <meta name="fediverse:creator">, which makes Mastodon show your handle
+  # on link previews of your posts. Handle form, not a URL. Also used to badge
+  # your own replies as OP in the comment thread.
+  fediverse_creator: "@example@mastodon.social"
+
+  # --- Bluesky (both optional) ---
+  # Replies from Mastodon and Bluesky are blended into one comment thread, so
+  # these are only needed if you announce on Bluesky too. Both may be omitted
+  # entirely: a site.yaml written before Bluesky support keeps working unchanged.
+
+  # The header's "Bluesky" link. Omit it and no link is rendered at all.
+  # Rendered with rel="me", the counterpart of the Mastodon link above.
+  # bluesky: "https://bsky.app/profile/example.bsky.social"
+
+  # Your Bluesky handle or DID, used to badge your own replies as OP.
+  # The counterpart of fediverse_creator. A handle is fine; a DID
+  # ("did:plc:...") is stabler if you ever rename.
+  # bluesky_creator: "example.bsky.social"
+
+footer:
+  # The AI transparency label and its explanation. Set label to an empty string
+  # if you would rather not display one; to change the footer's markup itself,
+  # edit engine/templates/base.html.
+  ai_label: "AI Transparency Label: EP-SN-IH-TN"
+  ai_explainer: "Everything ideated and originally written by yours truly, LLM used for engine development and text refinement."
+  ai_explainer_url: "https://have-a-look.at/aitags"
+
+display:
+  # Posts per page on the homepage and on each tag page.
+  page_size: 20
+
+  # How many recent posts each RSS feed carries (site-wide and per tag). Feeds
+  # are full-content, so a large number here makes for a large feed file.
+  feed_items: 15
+
+  # Topic pills shown before the "Show more topics..." fold on the homepage.
+  visible_tags: 10
+
+  # Reading speed used for the "N min read" estimate. 200-250 is the usual
+  # range for online prose; 225 keeps estimates from feeling rushed.
+  words_per_minute: 225
+
+  # Optional: an emoji shown beside a tag, so a reader can see at a glance what
+  # an article is about. Purely decorative - the emoji is NOT part of the tag,
+  # so slugs, feeds, the search index and the tag ledger are unaffected, and
+  # deleting a line here just removes the decoration.
+  #
+  # Matching is case-insensitive on the whole tag name, so list each tag you
+  # want decorated. Tags with no entry simply render without one.
+  # tag_emoji:
+  #   Photography: "📷"
+  #   "Infrared Photography": "📷"
+  #   "AI Ethics": "⚖️"
+
+
+# --- Images -----------------------------------------------------------------
+# Optional. The build re-encodes oversized photographs so a post is not tens of
+# megabytes; leave the whole section out to accept the defaults shown here.
+#
+# Only images that look photographic, are fully opaque, and are larger than
+# min_bytes are ever converted - screenshots, diagrams, logos and anything with
+# transparency are left exactly as exported. A converted image is written
+# alongside its original, which stays on disk in content_pipeline/content/assets/
+# unreferenced, so nothing is lost. The one destructive case is downscaling an
+# oversized JPEG, which rewrites that file in place - set max_width: 0 if
+# content_pipeline/content/assets/ is your only copy of a photo.
+images:
+  # Widest stored copy, in pixels. The text column is ~760px, so 1600 still
+  # covers a 2x display. Set to 0 to never downscale (conversion still runs).
+  max_width: 1600
+
+  # JPEG quality for converted photographs. 82 is visually indistinguishable
+  # from the original at normal viewing sizes; above ~90 the files grow fast
+  # for no visible gain.
+  jpeg_quality: 82
+
+  # Files smaller than this (bytes) are left alone - not worth trading a
+  # lossless original for a lossy one to save a few kilobytes.
+  min_bytes: 200000

@@ -1,0 +1,5 @@
+Markdown>=3.5,<4.0
+PyYAML>=6.0,<7.0
+# Optional: build-time image optimisation (engine/images.py). Without it the
+# build still runs and hosts images exactly as exported, printing one warning.
+Pillow>=10.0

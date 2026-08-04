@@ -1,0 +1,58 @@
+# Local publishing credentials — never commit
+publish.local.sh
+
+# Site identity (name, URL, author, links) — ships as site.example.yaml; copy
+# to site.yaml and make it yours. Keeps a fork from inheriting someone else's
+# name and URLs.
+site.yaml
+
+# Personal writing voice — ships as content_pipeline/VOICE.example.md; copy to
+# content_pipeline/VOICE.md and fill in your own sample. Your VOICE.md stays local.
+VOICE.md
+
+# Working conventions for this repo (commit style, editorial habits). Personal
+# preference rather than engine behaviour, so it stays local like VOICE.md -
+# a fork inherits the engine, not how its author likes to work.
+engine/docs/CONVENTIONS.md
+
+# Claude-specific files (never commit any of Claude's internal files)
+.claude/
+claude.md
+CLAUDE.md
+CLAUDE.local.md
+
+# Content pipeline working state: the ingestion queue, the drafting workspace,
+# the archive of already-ingested sources, and the published Markdown. Only
+# VOICE.example.md and TEMPLATE.md are tracked inside content_pipeline/.
+# These patterns carry no leading slash, so they match at any depth and already
+# cover content_pipeline/content/ etc. without naming the parent.
+content/
+drafts/
+processed/
+sources/
+# Hand-written standalone pages (about, colophon). This author's words, same as
+# the posts - the engine renders them, it doesn't ship them.
+pages/
+# Zine builds: generated print PDFs/.sla plus their build scripts. Personal
+# output made from the author's own posts and photos, same as the rest here.
+zines/
+
+# Compiled output
+public/
+
+# Site-owned static assets: the author's own PDFs, standalone pages, and search
+# engine verification files. Copied into public/ verbatim at publish time, and
+# never tracked. The engine's own theme assets (style.css, search.js, the
+# vendored fonts, the comment sanitizer, favicons) live in
+# engine/templates/static/ and ARE tracked — that split is what lets this whole
+# directory be ignored outright instead of needing a negation per theme file.
+public_static/
+
+# Runtime markers
+.setup_done
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
