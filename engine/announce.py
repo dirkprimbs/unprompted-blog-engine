@@ -333,16 +333,20 @@ def announce_bluesky(title, summary, url, tags):
         "langs": ["en"],
         "facets": build_facets(text, url),
         # Bluesky does no link crawling, so a post with a URL in it shows no
-        # preview unless the card is supplied. Built from the post's own title
-        # and summary; no 'thumb', because a thumbnail must be uploaded as a
-        # blob under 1MB and that would drag image resizing (and the optional
-        # Pillow dependency) into the announce path for a decoration.
+        # preview unless the card is supplied. Title only, deliberately: the
+        # summary is already the body of the post above it, and repeating it in
+        # the card made every announcement read twice. An empty 'description'
+        # renders the card as a compact title + domain chip, which is the point
+        # of keeping it at all - a real tap target instead of bare blue text.
+        # No 'thumb' either, because a thumbnail must be uploaded as a blob
+        # under 1MB and that would drag image resizing (and the optional Pillow
+        # dependency) into the announce path for a decoration.
         "embed": {
             "$type": "app.bsky.embed.external",
             "external": {
                 "uri": url,
                 "title": title[:300],
-                "description": (summary or "")[:1000],
+                "description": "",
             },
         },
     }
