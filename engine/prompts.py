@@ -99,10 +99,12 @@ def render(prompt_name, /, **values):
         _missing(name)
 
     text = str(entry['text'])
-    for key, value in values.items():
-        text = text.replace('{' + key + '}', str(value))
 
-    leftover = sorted(set(_PLACEHOLDER_RE.findall(text)))
+    # Check the template, never the filled-in result. A prompt asking for
+    # something the engine does not supply is a property of the YAML, and the
+    # values are arbitrary prose - a post that happens to quote one of these
+    # prompts carries literal braces, and those are data, not placeholders.
+    leftover = sorted(set(_PLACEHOLDER_RE.findall(text)) - set(values))
     if leftover:
         supplied = ", ".join(sorted(values)) or "(none)"
         print(f"❌ Prompt '{name}' has unfilled placeholder(s): "
@@ -112,7 +114,12 @@ def render(prompt_name, /, **values):
               f"you do not want that value in the prompt.")
         sys.exit(1)
 
-    return text
+    # One pass over the template, so a brace inside one value is never treated
+    # as a placeholder for another - which would let a draft or an existing
+    # post inject text into the prompt just by quoting it.
+    return _PLACEHOLDER_RE.sub(
+        lambda m: str(values[m.group(1)]) if m.group(1) in values else m.group(0),
+        text)
 
 
 def validate(expected=()):
