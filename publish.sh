@@ -63,6 +63,18 @@ ensure_site_config() {
     fi
 }
 
+# True when publish.local.sh assigns the named variable itself, as opposed to
+# the value merely being present in the environment already. Sourcing the config
+# overwrites an inherited value, so this - not the variable's contents - is what
+# says whether a secret belongs to THIS site.
+#
+# Matches an assignment at the start of a line, with or without `export`, so a
+# commented-out example line in the shipped template does not count as set.
+config_assigns() {
+    [ -f "$CONFIG_FILE" ] || return 1
+    grep -qE "^[[:space:]]*(export[[:space:]]+)?$1=" "$CONFIG_FILE"
+}
+
 # First-run diagnostic: verify key dependencies. Core deps (❌) block the
 # build; optional deps (⚠️) only matter for ingestion or deploy.
 run_diagnostics() {
@@ -127,7 +139,18 @@ run_diagnostics() {
 
     if [ "${USES_OPENROUTER:-0}" -gt 0 ]; then
         if [ -n "${OPENROUTER_API_KEY:-}" ]; then
-            echo "  ✅ OPENROUTER_API_KEY present (remote model role configured)"
+            # Name where the key came from. A key exported globally (~/.zshrc,
+            # ~/.profile) satisfies this check without appearing in any file
+            # here, so "present" alone would read as "this site is configured"
+            # when in fact every instance of the engine on this machine is
+            # quietly sharing - and billing - one key.
+            if config_assigns OPENROUTER_API_KEY; then
+                echo "  ✅ OPENROUTER_API_KEY present (from publish.local.sh)"
+            else
+                echo "  ✅ OPENROUTER_API_KEY present — inherited from your shell"
+                echo "     environment, not publish.local.sh. Remote calls from this"
+                echo "     site bill that key; set it here to give this site its own."
+            fi
         else
             echo "  ⚠️  A model role uses OpenRouter but OPENROUTER_API_KEY is unset — export it in publish.local.sh"
         fi
