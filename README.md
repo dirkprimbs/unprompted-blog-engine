@@ -142,6 +142,8 @@ No model ever touches a file written this way (bar the best-effort image caption
 
 **Standalone pages** (an about page, a colophon) work the same way but live in `content_pipeline/pages/`. A file `pages/about.md` renders to `/about.html` at the site root - no date, no tags, no feed entry - and only needs `title` and `description` in its frontmatter.
 
+Two things worth knowing about them. A page named `index.md` claims `/` and replaces the post feed there, which is how you run a site whose front page is a landing page rather than a river of posts. And adding `layout: panel` to a page's frontmatter sets its title in a narrow left-hand column with the body beside it, in a sans face on a wider measure - signage rather than an article. Both are opt-in; a page without them renders exactly as before.
+
 ## Interacting with the system
 
 Everything runs through `publish.sh`. The three stages - ingest, build, deploy - each run on their own so you can stop and check between them:

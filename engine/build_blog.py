@@ -809,7 +809,19 @@ def render_standalone_pages(base_template, sitemap_urls):
     from one template instead of a copy that quietly stops matching the site.
 
     The filename is the URL: pages/about.md -> /about.html. Frontmatter takes
-    'title' and 'description'; the body is plain Markdown."""
+    'title' and 'description'; the body is plain Markdown.
+
+    A page named index.md claims '/' and replaces the generated post feed there.
+    That falls out of ordering - this runs after the homepage is written in
+    build_site() - but it is deliberate and relied upon: it is how a site whose
+    front page is a standalone landing page rather than a river of posts is
+    built, without the engine needing a mode for it.
+
+    Frontmatter also takes 'layout: panel', which sets the page's title as a
+    heading in a narrow left column with the body beside it, instead of running
+    the body full width under no heading at all. Anything else (including no
+    value) renders the plain single-column page, which is what every page
+    written before this key existed keeps."""
     if not os.path.isdir(PAGES_DIR):
         return
     for filename in sorted(os.listdir(PAGES_DIR)):
@@ -837,13 +849,23 @@ def render_standalone_pages(base_template, sitemap_urls):
         # backlink healing to do), so they need the image sizing applied here.
         body_html = _enhance_images(body_html)
 
+        # 'layout: panel' puts the page title in a left-hand column beside the
+        # body. The heading is emitted here rather than written into the
+        # Markdown so it cannot drift from the <title> and the og:title, which
+        # come from the same frontmatter field.
+        if str(meta.get('layout', '')).strip().lower() == 'panel':
+            wrapper_class = "article-content page-content page-panel"
+            body_html = f'<h1 class="panel-title">{esc(title)}</h1>{body_html}'
+        else:
+            wrapper_class = "article-content page-content"
+
         page_html = safe_render(base_template, {
             "%PAGE_TITLE%": f"{esc(title)} — {esc(SITE_NAME)}",
             "%META_DESCRIPTION%": esc(description),
             "%OG_TYPE%": "website",
             "%PAGE_SLUG%": f"{name}.html",
             "%STRUCTURED_DATA%": "",
-            "%MAIN_CONTENT%": f'<div class="article-content page-content">{body_html}</div>',
+            "%MAIN_CONTENT%": f'<div class="{wrapper_class}">{body_html}</div>',
         })
         write_file_if_changed(os.path.join(PUBLIC_DIR, f"{name}.html"), page_html)
         sitemap_urls.append(f"{SITE_URL}/{name}.html")

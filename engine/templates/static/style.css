@@ -1003,6 +1003,107 @@ details.more-tags summary:hover {
 --------------------------------------------------------------------------- */
 .page-content > h1:first-of-type { margin-bottom: 0.6em; }
 
+/* --- PANEL LAYOUT ('layout: panel' in a page's frontmatter) ---
+   Title in a narrow left column, body beside it. The wider measure this needs
+   is granted to the page rather than to .container generally, so an article
+   keeps its 760px reading column. */
+.container:has(.page-panel) {
+    max-width: 1000px;
+}
+/* The footer's rule is a full-width line under the page, so it has to match
+   whatever measure the page above it is using or it starts partway in from the
+   text it is closing off. */
+body:has(.page-panel) .site-footer {
+    max-width: 1000px;
+}
+.page-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr);
+    column-gap: 56px;
+    /* Sans, not the article serif. A panel page is signage - who this is, what
+       is here, where to go next - read in glances rather than settled into, and
+       the serif's job on an article page is the opposite of that. */
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    letter-spacing: 0;
+}
+/* Every vertical margin here is set on both sides rather than left to the
+   browser default, because a grid container does not collapse its children's
+   margins: the gap between two blocks is the sum of the two, so an unset
+   margin-top is a gap silently added to the one below it. */
+.page-panel p { margin: 0 0 20px 0; }
+/* Headings scaled to the panel's smaller body text. The article sizes are set
+   against a 20px serif measure and, dropped in here, read as a page of titles
+   with captions under them. */
+.page-panel h2 { font-size: 21px; margin: 40px 0 12px 0; letter-spacing: -0.2px; }
+.page-panel h3 { font-size: 16px; margin: 30px 0 10px 0; letter-spacing: 0; }
+.page-panel h2 + h3 { margin-top: 20px; }
+/* Every child sits in the right-hand column except the title. Grid's own
+   placement then stacks them from the first row down, which is what puts the
+   opening paragraph level with the heading instead of below it. */
+.page-panel > * { grid-column: 2; }
+.page-panel > .panel-title { grid-column: 1; }
+.panel-title {
+    /* Small, bold and opened up: a label for the section rather than a headline
+       competing with the masthead above it. */
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.5;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 6px 0 0 0;
+}
+/* The body starts level with the title. Child 1 is .panel-title (which sits in
+   the other column), so child 2 is the first thing in this one - NOT
+   ':first-of-type', which matches the first element of every type and would
+   also flatten the first heading against whatever precedes it. */
+.page-panel > *:nth-child(2) { margin-top: 0; }
+
+@media (max-width: 782px) {
+    /* One column: the left rail has nowhere to go, and a title stacked over
+       its own body is the same reading order the grid was producing. */
+    .page-panel { display: block; }
+    .panel-title { margin-bottom: 1.2em; }
+}
+
+/* --- PICTURE GRID (a page's own markup, e.g. the speaker pictures) ---
+   Thumbnails at their natural size, each linking to the full file. Sized in
+   columns rather than by a fixed width so portrait, square and landscape crops
+   sit on one baseline grid without being stretched to match. */
+.speaker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 26px 20px;
+    align-items: end;
+    margin: 24px 0 28px 0;
+}
+.speaker-grid figure {
+    margin: 0;
+}
+/* The article rule centres images and gives them 30px of vertical margin,
+   which inside a grid cell is a gap the grid already provides. */
+.page-content .speaker-grid img {
+    margin: 0;
+    width: 100%;
+    height: auto;
+    border-radius: 3px;
+}
+.speaker-grid a {
+    display: block;
+    text-decoration: none;
+}
+.speaker-grid a:hover img {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.speaker-grid figcaption {
+    margin-top: 7px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
 .about-portrait {
     float: right;
     width: 180px;
