@@ -283,6 +283,76 @@ since their size can't be known without fetching them.
 Called from `_absolutize_body()` for posts, and directly for standalone pages,
 which don't go through that function.
 
+### `render_standalone_pages(base_template, sitemap_urls)`
+
+Render `content_pipeline/pages/*.md` into the site root through the same
+template as everything else - `pages/about.md` -> `/about.html`. No date, no
+tags, no feed entry; the frontmatter needs only `title` and `description`.
+Appends each page to the sitemap.
+
+A page named `index.md` claims `/` and replaces the generated post feed there.
+That falls out of ordering - this runs after `build_site()` has written the
+homepage - but it is deliberate and relied upon: it is how a site fronted by a
+landing page rather than a river of posts is built, without the engine needing
+a mode for it.
+
+`layout: panel` in the frontmatter adds `page-panel` to the wrapper and emits
+the title as an `<h1 class="panel-title">`, which style.css sets in a narrow
+left column with the body beside it. The heading is emitted here rather than
+written into the Markdown so it cannot drift from the `<title>` and `og:title`,
+which come from the same frontmatter field. Any other value, or none, renders
+the plain single-column page.
+
+Pages don't go through `_absolutize_body()` (no slugs to heal), so
+`_enhance_images()` is called on them directly.
+
+### `_nav_link_html(entry, extra_class='')`
+
+One `<a>` in the header menu, or a `<span>` for a `nav:` entry that groups
+others without linking anywhere itself. That case must not become a link to
+`'#'`: a focusable control that does nothing, which screen readers announce as
+a link to the top of the page. The `<span>` carries `tabindex="0"` instead, so
+a keyboard can reach it and open the submenu underneath - which is revealed by
+`:focus-within`, and so never opens if nothing in the branch can be focused.
+
+Off-site hrefs get `target="_blank" rel="noopener"`, matching what article
+bodies get from `_externalize_links()`.
+
+### `_header_nav_html()`
+
+The header's menu, built from `site.yaml`'s `nav:` (see `config._nav()`).
+
+With no `nav:` configured this returns the engine's built-in list - About, the
+two optional social links, Contact - so an existing `site.yaml` renders exactly
+as it did before this function existed. The RSS link, the search box and the
+theme toggle are not part of it either way: they are engine furniture that
+every site gets, not editorial navigation.
+
+Submenus are plain nested `<ul>`s revealed on hover and `:focus-within`, with
+no JavaScript. Below 900px style.css drops the positioning and lets them sit
+inline, permanently open - a hover target cannot be reached on a touchscreen,
+and a menu that needs a script to open is a menu that is missing whenever the
+script is.
+
+### `_social_link_html(url, label)`
+
+One optional social link for the built-in header, empty when the URL is unset.
+`rel="me"` is what lets the profile on the other end verify this domain back,
+so it stays even though these are ordinary external links otherwise.
+
+### `_site_branding_html()`
+
+The header's branding band: the site name set large with its tagline
+underneath, above the nav row. Emitted only when `site.yaml` sets
+`site.tagline`; without one there is nothing to put on a second line, and the
+compact single-row header - the engine's original shape, and the better one for
+reading a long post - is what every `site.yaml` predating the key keeps.
+
+The band scrolls away while the nav row below stays stuck to the top. That
+takes `header:has(.site-branding)` in style.css un-sticking the header itself
+and moving the stickiness to `.nav-container`, since otherwise the whole
+two-tier block would stick and eat the viewport on every scroll.
+
 ### `_asset_version()`
 
 A short content hash of the theme files the template links by name
@@ -381,6 +451,14 @@ legitimately contain a literal '%SOMETHING%', and injecting it first would
 expose it to the remaining replacements. Defaults are supplied for
 %SITE_URL% and for the two optional head blocks (%OG_IMAGE_TAGS%,
 %ALT_FEED_LINK%) so callers only pass what applies to their page type.
+
+The site.yaml-derived values are defaulted here too. Most are single strings
+escaped on the way in, since they land inside `content="..."`. Three are whole
+blocks instead, because each is optional and must be absent rather than empty:
+%FEDIVERSE_CREATOR_META% (the entire `<meta>` tag), %HEADER_NAV%
+(`_header_nav_html()`) and %SITE_BRANDING% (`_site_branding_html()`). The last
+two are the one place author text becomes markup rather than an attribute
+value, so they are escaped element by element inside their builders.
 
 ### `rss_item_xml(post)`
 
