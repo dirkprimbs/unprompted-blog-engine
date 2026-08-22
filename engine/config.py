@@ -117,6 +117,13 @@ AUTHOR_EMAIL = str(_cfg['author']['email'])
 
 LINK_ABOUT = str(_cfg['links']['about'])
 
+# Optional second line under the site name in the header. Setting it switches
+# the header to its two-tier form (a branding band above the sticky nav row);
+# leaving it out keeps the compact single-row header, which is what every
+# site.yaml written before this key existed gets. See base.html's
+# %SITE_BRANDING%.
+SITE_TAGLINE = str(_cfg['site'].get('tagline') or '').strip()
+
 
 def _optional_link(key):
     """One optional links.* string, empty when unset.
@@ -148,6 +155,64 @@ FEDIVERSE_CREATOR = _optional_link('fediverse_creator')
 # author's own replies, the counterpart of FEDIVERSE_CREATOR.
 LINK_BLUESKY = _optional_link('bluesky')
 BLUESKY_CREATOR = _optional_link('bluesky_creator')
+
+def _nav():
+    """The header's link list, as an ordered list of entries:
+
+        [{'label': str, 'href': str, 'items': [{'label','href'}, ...]}, ...]
+
+    Optional, and absent is the normal case: with no `nav:` section the engine
+    keeps emitting its built-in header (About, the social links, Contact), so
+    every site.yaml written before this key existed renders exactly as before.
+    A site that sets one replaces that list wholesale - the RSS link, the search
+    box and the theme toggle are engine furniture and stay either way.
+
+    An entry may carry `href`, `items`, or both: a top-level link that also
+    opens a submenu is the common shape for a section that has a landing page of
+    its own. Submenus are one level deep on purpose; anything deeper wants a
+    page, not a hover target that cannot be reached on a touchscreen.
+
+    Validation is loud rather than lenient, matching the rest of this file. A
+    mistyped key here does not corrupt anything, but it silently drops a link
+    from every page of the site - and a missing menu entry is exactly the kind
+    of thing an author does not notice on their own site, because they navigate
+    it from memory."""
+    raw = _cfg.get('nav')
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': nav must be a list of menu entries "
+              f"(got {type(raw).__name__}).")
+
+    def _entry(item, where, allow_children):
+        if not isinstance(item, dict):
+            _fail(f"❌ '{SITE_CONFIG_PATH}': {where} must be a mapping with "
+                  f"'label' and 'href' (got {type(item).__name__}).")
+        label = str(item.get('label') or '').strip()
+        if not label:
+            _fail(f"❌ '{SITE_CONFIG_PATH}': {where} is missing 'label'.")
+        href = str(item.get('href') or '').strip()
+        children = item.get('items')
+        if children is not None and not allow_children:
+            _fail(f"❌ '{SITE_CONFIG_PATH}': {where} ({label!r}) has 'items', "
+                  f"but submenus are only one level deep.")
+        if children is None:
+            children = []
+        elif not isinstance(children, list):
+            _fail(f"❌ '{SITE_CONFIG_PATH}': nav entry {label!r} has 'items' "
+                  f"that is not a list (got {type(children).__name__}).")
+        else:
+            children = [_entry(c, f"nav entry {label!r} -> items[{i}]", False)
+                        for i, c in enumerate(children)]
+        if not href and not children:
+            _fail(f"❌ '{SITE_CONFIG_PATH}': {where} ({label!r}) needs an "
+                  f"'href', 'items', or both - it currently links nowhere.")
+        return {'label': label, 'href': href, 'items': children}
+
+    return [_entry(item, f"nav[{i}]", True) for i, item in enumerate(raw)]
+
+
+NAV = _nav()
 
 AI_LABEL = str(_cfg['footer']['ai_label'])
 AI_EXPLAINER = str(_cfg['footer']['ai_explainer'])

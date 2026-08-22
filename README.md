@@ -53,7 +53,9 @@ At minimum set `site.name`, `site.url`, `author.name`, `author.email`, and the e
 
 This matters more than the visible fields suggest: the invisible ones - the JSON-LD `author` block, the `og:image:alt` text - are exactly what search engines and social scrapers read to decide who wrote a post. Keeping all of them in one gitignored file is the point, so a fork starts neutral instead of publishing under your name.
 
-To change the footer's *markup* or the header's link list (as opposed to their wording), edit `engine/templates/base.html`.
+The header's menu is configuration too. By default it carries About, your social links and Contact; add a `nav:` section to `site.yaml` and that list is replaced by your own, including one level of dropdowns. Submenus open on hover and on keyboard focus with no JavaScript, and sit inline and permanently open on narrow screens, where a hover target cannot be reached. Setting `site.tagline` puts the site name and that line in a masthead band above the menu row, which then stays stuck to the top on its own.
+
+To change the footer's *markup* (as opposed to its wording), edit `engine/templates/base.html`.
 
 ### Configure the AI pipeline (optional)
 

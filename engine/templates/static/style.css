@@ -67,6 +67,67 @@ header {
     backdrop-filter: blur(5px);
     z-index: 100;
 }
+/* --- BRANDING BAND (only when site.yaml sets site.tagline) ---
+   The site name set large above the menu, the way a masthead reads, rather
+   than as one more item in a row of links. It is part of <header>, so the
+   whole block would otherwise stick to the top and eat the viewport on every
+   scroll. Instead the header un-sticks and the nav row inside it takes over
+   the stickiness: the masthead is shown once at the top of the page and
+   scrolls away, and the menu stays reachable. */
+header:has(.site-branding) {
+    position: static;
+    padding: 0;
+    border-bottom: 0;
+    background: none;
+    backdrop-filter: none;
+}
+.site-branding {
+    padding: 42px 20px 30px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+.branding-wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+.site-title {
+    display: inline-block;
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.1;
+    /* Uppercase with the letters opened up: at this size a wordmark reads as a
+       mark rather than as a heading, which is what tells a reader they are at
+       the front door of a site and not partway into an article. */
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-main);
+    text-decoration: none;
+}
+.site-tagline {
+    margin: 8px 0 0 0;
+    font-size: 16px;
+    color: var(--text-muted);
+}
+@media (max-width: 600px) {
+    .site-branding { padding: 28px 20px 22px 20px; }
+    .site-title { font-size: 30px; }
+    .site-tagline { font-size: 15px; }
+}
+header:has(.site-branding) .nav-container {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 0 20px;
+    background: var(--header-bg);
+    backdrop-filter: blur(5px);
+    border-bottom: 1px solid var(--border);
+}
+/* The masthead already says whose site this is, so the compact logo in the nav
+   row would be the same words twice. The band stays at every width, so this
+   does too. */
+header:has(.site-branding) .logo { display: none; }
+
 .nav-container {
     max-width: 1000px;
     margin: 0 auto;
@@ -100,6 +161,146 @@ header {
 }
 .header-links a:hover {
     color: var(--accent);
+}
+
+/* --- CONFIGURED MENU (site.yaml `nav:`) ---
+   Only rendered when the author configured one; a site without `nav:` gets the
+   plain .header-links row above and none of this applies. */
+.site-nav .nav-menu,
+.site-nav .submenu {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.site-nav .nav-menu {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+}
+.site-nav li {
+    position: relative;
+    /* The hover target has to include the gap between a parent and its
+       submenu, or the menu closes while the pointer crosses it. */
+    padding: 14px 0;
+}
+.site-nav a,
+.site-nav .submenu-parent {
+    color: var(--text-main);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.2s ease;
+}
+.site-nav a:hover,
+.site-nav li:hover > .submenu-parent,
+.site-nav li:focus-within > .submenu-parent {
+    color: var(--accent);
+}
+/* A section that groups links without linking anywhere itself is a <span>, not
+   an <a> - see _nav_link_html(). It still needs to look like the rest of the
+   row, and it must be focusable so a keyboard can open the submenu under it. */
+.site-nav span.submenu-parent {
+    cursor: default;
+}
+.site-nav .has-submenu > .submenu-parent::after {
+    content: "";
+    display: inline-block;
+    margin-left: 6px;
+    vertical-align: 2px;
+    border: 4px solid transparent;
+    border-top-color: currentColor;
+    border-bottom: 0;
+}
+.site-nav .submenu {
+    position: absolute;
+    top: 100%;
+    left: -16px;
+    min-width: 220px;
+    padding: 6px 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
+    /* Hidden with opacity+visibility rather than display:none so the panel can
+       fade, and so its links stay in the tab order' reach only while it is
+       open - visibility:hidden takes them out of it, display:none would too but
+       cannot transition. */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+    z-index: 110;
+}
+.site-nav li:hover > .submenu,
+.site-nav li:focus-within > .submenu {
+    opacity: 1;
+    visibility: visible;
+}
+.site-nav .submenu li {
+    padding: 0;
+}
+.site-nav .submenu a {
+    display: block;
+    padding: 9px 18px;
+    font-size: 14px;
+    white-space: normal;
+}
+.site-nav .submenu a:hover {
+    background: var(--surface);
+}
+
+@media (max-width: 900px) {
+    /* A hover-revealed panel cannot be opened by a finger, so below the width
+       where the row still fits on one line the submenus stop being panels: they
+       sit inline under their parent, permanently open, indented behind a rule.
+       That makes the whole menu one flat list - taller, but every link is
+       reachable by tap, and none of it depends on a script the engine does not
+       ship. */
+    .nav-container {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .nav-container > div {
+        flex-wrap: wrap;
+    }
+    /* The menu takes a whole row to itself and comes first. Without this it
+       shares a flex line with the RSS link and the theme toggle, which - being
+       centred against a menu many lines tall - come to rest halfway down the
+       podcast list, reading as though they belonged to it. The wrap has to go
+       on .header-links itself: that is the flex container those three are in,
+       and 'flex: 1 1 100%' does nothing to a line that cannot break. */
+    .header-links {
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+    .site-nav {
+        flex: 1 1 100%;
+        order: -1;
+    }
+    .site-nav .nav-menu {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 8px 20px;
+    }
+    .site-nav li { padding: 6px 0; }
+    .site-nav .has-submenu {
+        flex: 1 1 100%;
+    }
+    .site-nav .has-submenu > .submenu-parent::after { display: none; }
+    .site-nav .submenu {
+        position: static;
+        opacity: 1;
+        visibility: visible;
+        min-width: 0;
+        margin: 6px 0 0 2px;
+        padding: 0 0 0 14px;
+        border: 0;
+        border-left: 2px solid var(--border);
+        box-shadow: none;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 18px;
+    }
+    .site-nav .submenu a { padding: 4px 0; }
+    .site-nav .submenu a:hover { background: none; }
 }
 
 /* --- THEME TOGGLE (auto / light / dark) --- */

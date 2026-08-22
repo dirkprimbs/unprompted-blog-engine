@@ -26,7 +26,7 @@ from config import (
     SITE_NAME, SITE_DESCRIPTION, FEED_DESCRIPTION, AUTHOR_NAME,
     AI_LABEL, AI_EXPLAINER, AI_EXPLAINER_URL,
     AUTHOR_EMAIL, LINK_ABOUT, LINK_MASTODON, FEDIVERSE_CREATOR,
-    LINK_BLUESKY, BLUESKY_CREATOR,
+    LINK_BLUESKY, BLUESKY_CREATOR, SITE_TAGLINE, NAV,
     PAGE_SIZE, FEED_ITEMS, VISIBLE_TAGS, WORDS_PER_MINUTE, TAG_EMOJI,
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
 )
@@ -890,6 +890,93 @@ def _asset_version():
     return _ASSET_VERSION
 
 
+def _nav_link_html(entry, extra_class=''):
+    """One <a> in the header menu, or a <span> for a section that only groups
+    others. A submenu parent with no href of its own (site.yaml's `nav:` allows
+    that) must not become a link to '#': that is a focusable control which does
+    nothing, and screen readers announce it as a link to the top of the page."""
+    label = esc(entry['label'])
+    href = entry['href']
+    cls = f' class="{extra_class}"' if extra_class else ''
+    if not href:
+        # tabindex so a keyboard can reach it: the submenu underneath opens on
+        # :focus-within, which never fires if nothing in the branch can be
+        # focused, leaving those links reachable by mouse only.
+        return f'<span{cls} tabindex="0">{label}</span>'
+    # Same rule the article bodies get in _externalize_links(): off-site links
+    # open in a new tab, and keep sending a referrer so the sites we point at
+    # can see where their traffic came from.
+    target = ' target="_blank" rel="noopener"' if _is_external(href) else ''
+    return f'<a href="{esc(href)}"{cls}{target}>{label}</a>'
+
+
+def _header_nav_html():
+    """The header's menu, built from site.yaml's `nav:` (see config._nav).
+
+    With no `nav:` configured this returns the engine's built-in list - About,
+    the two optional social links, Contact - so an existing site.yaml renders
+    exactly as it did before this function existed. The RSS link, the search box
+    and the theme toggle are not part of it either way: they are engine
+    furniture that every site gets, not editorial navigation.
+
+    Submenus are plain nested <ul>s revealed on hover and on :focus-within, with
+    no JavaScript. On narrow screens style.css drops the positioning and lets
+    them sit inline, permanently open - a hover target cannot be reached on a
+    touchscreen, and a menu that needs a script to open is a menu that is
+    missing whenever the script is."""
+    if not NAV:
+        return (f'<a href="{esc(LINK_ABOUT)}">About</a>'
+                f'{_social_link_html(LINK_MASTODON, "Mastodon")}'
+                f'{_social_link_html(LINK_BLUESKY, "Bluesky")}'
+                f'<a href="mailto:{esc(AUTHOR_EMAIL)}">Contact</a>')
+
+    items = []
+    for entry in NAV:
+        if not entry['items']:
+            items.append(f'<li>{_nav_link_html(entry)}</li>')
+            continue
+        children = ''.join(f'<li>{_nav_link_html(child)}</li>'
+                           for child in entry['items'])
+        items.append(
+            '<li class="has-submenu">'
+            f'{_nav_link_html(entry, "submenu-parent")}'
+            f'<ul class="submenu">{children}</ul>'
+            '</li>'
+        )
+    return (f'<nav class="site-nav" aria-label="Main menu">'
+            f'<ul class="nav-menu">{"".join(items)}</ul></nav>')
+
+
+def _social_link_html(url, label):
+    """One optional social link for the built-in header. rel="me" is what lets
+    the profile on the other end verify this domain back, so it stays even
+    though these are ordinary external links otherwise."""
+    if not url:
+        return ''
+    return f'<a href="{esc(url)}" target="_blank" rel="me noopener">{label}</a>'
+
+
+def _site_branding_html():
+    """The header's branding band: the site name set large with its tagline
+    underneath, above the nav row.
+
+    Emitted only when site.yaml sets `site.tagline`. Without one there is
+    nothing to put on a second line, and the compact single-row header - the
+    engine's original shape, and the better one for reading a long post - is
+    what every site.yaml written before this key existed keeps.
+
+    The band scrolls away while the nav row below it stays stuck to the top;
+    see the `header` rules in style.css."""
+    if not SITE_TAGLINE:
+        return ''
+    return (
+        '<div class="site-branding"><div class="branding-wrap">'
+        f'<a href="/" class="site-title">{esc(SITE_NAME)}</a>'
+        f'<p class="site-tagline">{esc(SITE_TAGLINE)}</p>'
+        '</div></div>'
+    )
+
+
 def safe_render(template, mappings):
     # 1. Ensure SITE_URL is configured for the outer template layout
     if "%SITE_URL%" not in mappings:
@@ -907,18 +994,14 @@ def safe_render(template, mappings):
         ("%AI_EXPLAINER_URL%", AI_EXPLAINER_URL),
     ):
         mappings.setdefault(key, esc(value))
-    # Both social links are the whole element, not just an href: each is
-    # optional, and a site that uses neither must emit no link at all rather
-    # than an <a> pointing nowhere. rel="me" is what lets the profile on the
-    # other end verify this domain back.
-    mappings.setdefault("%LINK_MASTODON_ITEM%", (
-        f'<a href="{esc(LINK_MASTODON)}" target="_blank" rel="me noopener">Mastodon</a>'
-        if LINK_MASTODON else ''
-    ))
-    mappings.setdefault("%LINK_BLUESKY_ITEM%", (
-        f'<a href="{esc(LINK_BLUESKY)}" target="_blank" rel="me noopener">Bluesky</a>'
-        if LINK_BLUESKY else ''
-    ))
+    # The header menu, and the optional branding band above it. Both are whole
+    # blocks rather than single values: the menu is either the engine's built-in
+    # link list or the author's own `nav:` tree, and the branding band is absent
+    # entirely on a site with no tagline. Escaping happens inside the builders,
+    # element by element, since these are the one place author text becomes
+    # markup rather than an attribute value.
+    mappings.setdefault("%HEADER_NAV%", _header_nav_html())
+    mappings.setdefault("%SITE_BRANDING%", _site_branding_html())
     # Same reasoning one level up: the meta tag exists to make Mastodon show the
     # author's handle on link previews, so with no handle configured the whole
     # tag goes rather than shipping content="" on every page.

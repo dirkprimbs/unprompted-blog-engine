@@ -93,18 +93,18 @@
 </head>
 <body>
     <header>
+        <!-- The branding band: site name set large with its tagline under it.
+             Whole block, and empty unless site.yaml sets site.tagline - see
+             _site_branding_html(). It scrolls away; the nav row below stays. -->
+        %SITE_BRANDING%
         <div class="nav-container">
             <div>
                 <a href="/" class="logo">%SITE_NAME%</a>
                 <div class="header-links">
-                    <!-- No target="_blank": links.about now points at this
-                         site's own /about.html. Set it back if you point it at
-                         an off-site profile again. -->
-                    <a href="%LINK_ABOUT%">About</a>
-                    <!-- Whole elements: both are optional, empty when unset. -->
-                    %LINK_MASTODON_ITEM%
-                    %LINK_BLUESKY_ITEM%
-                    <a href="mailto:%AUTHOR_EMAIL%">Contact</a>
+                    <!-- The editorial menu: site.yaml's `nav:` tree when there
+                         is one, the engine's built-in About/social/Contact list
+                         when there isn't. See _header_nav_html(). -->
+                    %HEADER_NAV%
                     <a href="/feed.xml" target="_blank" style="display: inline-flex; align-items: center; gap: 5px;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg>RSS
                     </a>

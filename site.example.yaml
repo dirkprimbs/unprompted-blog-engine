@@ -14,6 +14,12 @@ site:
   # Shown in the header, the browser tab, both RSS feeds, and og:site_name.
   name: "Example Unprompted"
 
+  # Optional. A second line under the site name. Setting it switches the header
+  # to its two-tier form - a masthead band carrying the name and this line,
+  # above the menu row, which stays stuck to the top as the band scrolls away.
+  # Leave it out for the compact single-row header.
+  # tagline: "Notes on things I build."
+
   # Canonical base URL. No trailing slash. Every internal link, the sitemap,
   # both feeds, and the announcement toot are built from this, so it must match
   # where the site is really served or links will point at the wrong host.
@@ -67,6 +73,43 @@ links:
   # The counterpart of fediverse_creator. A handle is fine; a DID
   # ("did:plc:...") is stabler if you ever rename.
   # bluesky_creator: "example.bsky.social"
+
+
+# --- Header menu -------------------------------------------------------------
+# Optional. Without it the header carries the engine's built-in list - About,
+# whichever of the two social links above are set, and Contact - which is what
+# every site.yaml written before this section existed keeps.
+#
+# Setting it replaces that list with your own. The RSS link, the search box and
+# the theme toggle are engine furniture and appear either way.
+#
+# Each entry needs a `label` plus an `href`, `items`, or both:
+#   href only   - a plain link.
+#   items only  - a grouping label that opens a submenu but links nowhere
+#                 itself. Rendered as text, not as a link to '#'.
+#   both        - a link that also opens a submenu, for a section with a
+#                 landing page of its own.
+#
+# Submenus are one level deep. Off-site links open in a new tab automatically.
+# They appear on hover and on keyboard focus, with no JavaScript; on narrow
+# screens they sit inline and permanently open, because a hover target cannot
+# be reached by a finger.
+#
+# nav:
+#   - label: "Home"
+#     href: "/"
+#   - label: "Projects"
+#     href: "/projects.html"
+#     items:
+#       - label: "Something I built"
+#         href: "https://example.com/thing"
+#       - label: "Another thing"
+#         href: "https://example.com/other"
+#   - label: "Elsewhere"
+#     items:
+#       - label: "Mastodon"
+#         href: "https://mastodon.social/@example"
+
 
 footer:
   # The AI transparency label and its explanation. Set label to an empty string
