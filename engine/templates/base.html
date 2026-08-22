@@ -85,8 +85,9 @@
     <meta name="twitter:title" content="%PAGE_TITLE%">
     <meta name="twitter:description" content="%META_DESCRIPTION%">
 
-    <meta name="fediverse:creator" content="%FEDIVERSE_CREATOR%">
-    
+    <!-- Whole tag: omitted when links.fediverse_creator is unset. -->
+    %FEDIVERSE_CREATOR_META%
+
     %STRUCTURED_DATA%
 
 </head>
@@ -100,9 +101,8 @@
                          site's own /about.html. Set it back if you point it at
                          an off-site profile again. -->
                     <a href="%LINK_ABOUT%">About</a>
-                    <a href="%LINK_MASTODON%" target="_blank" rel="me noopener">Mastodon</a>
-                    <!-- Whole element, not just an href: links.bluesky is
-                         optional and renders as nothing when unset. -->
+                    <!-- Whole elements: both are optional, empty when unset. -->
+                    %LINK_MASTODON_ITEM%
                     %LINK_BLUESKY_ITEM%
                     <a href="mailto:%AUTHOR_EMAIL%">Contact</a>
                     <a href="/feed.xml" target="_blank" style="display: inline-flex; align-items: center; gap: 5px;">

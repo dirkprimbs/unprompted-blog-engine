@@ -902,20 +902,29 @@ def safe_render(template, mappings):
         ("%SITE_NAME%", SITE_NAME),
         ("%AUTHOR_EMAIL%", AUTHOR_EMAIL),
         ("%LINK_ABOUT%", LINK_ABOUT),
-        ("%LINK_MASTODON%", LINK_MASTODON),
-        ("%FEDIVERSE_CREATOR%", FEDIVERSE_CREATOR),
         ("%AI_LABEL%", AI_LABEL),
         ("%AI_EXPLAINER%", AI_EXPLAINER),
         ("%AI_EXPLAINER_URL%", AI_EXPLAINER_URL),
     ):
         mappings.setdefault(key, esc(value))
-    # The header's Bluesky link is the whole element, not just its href, because
-    # links.bluesky is optional - a site without one must emit no link at all
-    # rather than an <a> pointing nowhere. rel="me" mirrors the Mastodon link:
-    # it is what lets Bluesky verify this domain back to the profile.
+    # Both social links are the whole element, not just an href: each is
+    # optional, and a site that uses neither must emit no link at all rather
+    # than an <a> pointing nowhere. rel="me" is what lets the profile on the
+    # other end verify this domain back.
+    mappings.setdefault("%LINK_MASTODON_ITEM%", (
+        f'<a href="{esc(LINK_MASTODON)}" target="_blank" rel="me noopener">Mastodon</a>'
+        if LINK_MASTODON else ''
+    ))
     mappings.setdefault("%LINK_BLUESKY_ITEM%", (
         f'<a href="{esc(LINK_BLUESKY)}" target="_blank" rel="me noopener">Bluesky</a>'
         if LINK_BLUESKY else ''
+    ))
+    # Same reasoning one level up: the meta tag exists to make Mastodon show the
+    # author's handle on link previews, so with no handle configured the whole
+    # tag goes rather than shipping content="" on every page.
+    mappings.setdefault("%FEDIVERSE_CREATOR_META%", (
+        f'<meta name="fediverse:creator" content="{esc(FEDIVERSE_CREATOR)}">'
+        if FEDIVERSE_CREATOR else ''
     ))
     # Cache-busting stamp for the theme files (see _asset_version). Not escaped
     # because it is a hex digest this build computed, not author input.

@@ -44,7 +44,7 @@ def _rel(path):
 _REQUIRED = {
     'site': ('name', 'url', 'description', 'feed_description'),
     'author': ('name', 'email'),
-    'links': ('about', 'mastodon', 'fediverse_creator'),
+    'links': ('about',),
     'footer': ('ai_label', 'ai_explainer', 'ai_explainer_url'),
     'display': ('page_size', 'feed_items', 'visible_tags', 'words_per_minute'),
 }
@@ -116,8 +116,6 @@ AUTHOR_NAME = str(_cfg['author']['name'])
 AUTHOR_EMAIL = str(_cfg['author']['email'])
 
 LINK_ABOUT = str(_cfg['links']['about'])
-LINK_MASTODON = str(_cfg['links']['mastodon'])
-FEDIVERSE_CREATOR = str(_cfg['links']['fediverse_creator'])
 
 
 def _optional_link(key):
@@ -127,10 +125,23 @@ def _optional_link(key):
     every site.yaml already written predates these keys and must keep working
     untouched. Empty is the honest "not configured" value here - unlike the
     numbers in _int(), a blank link disables a feature rather than corrupting
-    one, so there is nothing to fail loudly about."""
+    one, so there is nothing to fail loudly about.
+
+    Mastodon is optional on the same terms, for the opposite reason: a site that
+    announces nowhere and carries no comment thread would otherwise be forced to
+    advertise a network it does not use. Empty means the header link and the
+    fediverse:creator meta are not rendered at all - see build_blog.py's
+    %LINK_MASTODON_ITEM%. Every site.yaml that already sets these is unaffected;
+    a required key that becomes optional never invalidates an existing file."""
     value = _cfg['links'].get(key)
     return '' if value is None else str(value).strip()
 
+
+# Mastodon, the first comment provider. LINK_MASTODON is the header link;
+# FEDIVERSE_CREATOR is the handle used to badge the author's own replies and to
+# set <meta name="fediverse:creator">.
+LINK_MASTODON = _optional_link('mastodon')
+FEDIVERSE_CREATOR = _optional_link('fediverse_creator')
 
 # Bluesky, the second comment provider. LINK_BLUESKY is the header link (shown
 # only when set); BLUESKY_CREATOR is the handle or DID used to badge the

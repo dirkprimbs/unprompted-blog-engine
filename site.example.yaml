@@ -40,6 +40,11 @@ links:
   # about page on this site, a personal homepage.
   about: "https://example.com/about"
 
+  # --- Mastodon (both optional) ---
+  # Only needed if you announce on Mastodon. Omit both and the header link and
+  # the fediverse:creator meta are not rendered at all - which is what a site
+  # that announces nowhere and carries no comment thread wants.
+
   # The header's "Mastodon" link. Rendered with rel="me", which is what lets
   # your Mastodon profile verify the link back to this site.
   mastodon: "https://mastodon.social/@example"

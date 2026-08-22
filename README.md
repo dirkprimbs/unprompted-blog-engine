@@ -192,7 +192,9 @@ BLUESKY_APP_PASSWORD="xxxx-xxxx-xxxx-xxxx"   # an App Password, NOT your account
 
 Create the Bluesky app password at **bsky.app → Settings → App Passwords**. It can post on your behalf but cannot delete or migrate the account.
 
-Optionally add your Bluesky identity to `site.yaml` under `links:` - `bluesky` for a header link, `bluesky_creator` (handle or DID) to badge your own replies as OP. Both may be omitted.
+Each network also has two optional entries in `site.yaml` under `links:` - `mastodon` / `bluesky` for a header link, and `fediverse_creator` / `bluesky_creator` (handle or DID) to badge your own replies as OP. All four may be omitted: a link you leave out is not rendered at all, rather than pointing nowhere.
+
+**Running a site with no social presence at all** is a supported configuration: leave the credentials out of `publish.local.sh` and the four `links:` entries out of `site.yaml`. Nothing is announced, no header link or `fediverse:creator` meta is emitted, and since the comment thread is driven by the coordinates that announcing writes, no post gets a comment section - `comments.js` is not even loaded. One caveat if you might change your mind later: every ingested post is stamped `announce: pending`, and with no network configured that marker never clears, so enabling one afterwards would announce the whole archive at once. Strip the `announce: pending` lines from older posts first if you only want new ones to go out.
 
 With credentials set, deploying a new post announces it, bookmarks the announcement, and records its coordinates in the post's frontmatter so the thread appears. Re-runs never re-announce. Each network is skipped on its own when its credentials are missing, and if one network fails the other still goes out - the post stays pending and the next run posts only the missing half.
 
