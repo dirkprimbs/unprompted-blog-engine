@@ -21,6 +21,9 @@ Usage: ./publish.sh [option]
   --rebuild     Skip ingestion. Rebuild from existing content, confirm, deploy.
   --ingest      Ingest drafts only. No build, no upload.
   --build       Build only. No confirmation, no upload. Safe to run anytime.
+  --serve [port]
+                Serve the built public/ on 127.0.0.1 (default port 8000) so you
+                can look at it in a browser. Ctrl-C to stop. No build, no upload.
   --deploy      Upload the existing public/ as-is. No rebuild, no confirmation
                 prompt - passing the flag IS the confirmation.
   --setup       Re-run dependency diagnostics and create missing folders.
@@ -28,7 +31,8 @@ Usage: ./publish.sh [option]
 
 The three pipeline stages, each runnable on its own:
   ./publish.sh --ingest    # drafts -> content, then read what the model wrote
-  ./publish.sh --build     # content -> public, then inspect it in a browser
+  ./publish.sh --build     # content -> public
+  ./publish.sh --serve     # look at what you just built, in a real browser
   ./publish.sh --deploy    # ship exactly what you just looked at
 USAGE
 }
@@ -202,10 +206,11 @@ if [ ! -f "$SETUP_MARKER" ]; then
     run_diagnostics
 fi
 
-# --build never touches the network, so it is the one mode that works without
-# credentials - useful on a fresh clone, or when you just want to look at the
-# compiled site. Every other mode can end up uploading, so it needs the config.
-if [ ! -f "$CONFIG_FILE" ] && [ "${1:-}" != "--build" ]; then
+# --build and --serve never touch the network, so they are the modes that work
+# without credentials - useful on a fresh clone, or when you just want to look at
+# the compiled site. Every other mode can end up uploading, so it needs the
+# config.
+if [ ! -f "$CONFIG_FILE" ] && [ "${1:-}" != "--build" ] && [ "${1:-}" != "--serve" ]; then
     echo "❌ Missing $CONFIG_FILE"
     echo "💡 Copy publish.local.example.sh to publish.local.sh and add your FTP credentials."
     echo "   (./publish.sh --build works without it.)"
@@ -281,8 +286,48 @@ EOF
 preview_banner() {
     echo "--------------------------------------------------"
     echo "👀 Local compilation finished successfully."
-    echo "👉 You can now preview 'public/index.html' in your browser."
+    # Not "open public/index.html": every internal link is root-absolute
+    # (/style.css, /posts/slug.html), which resolves against the filesystem root
+    # under file:// and 404s. The site needs to be served from somewhere.
+    echo "👉 Look at it with: ./publish.sh --serve"
     echo "--------------------------------------------------"
+}
+
+# Serve the built site locally. This is not a dev server - there is no watching
+# and no reloading, because a build is one command and pretending otherwise would
+# mean a second code path that can disagree with the real one.
+#
+# Two deliberate limits worth knowing before you trust what you see:
+#   - It binds 127.0.0.1, NOT 0.0.0.0. An unpublished site is nobody else's
+#     business, and a laptop on a cafe network should not be quietly hosting the
+#     next post to everyone on it. Change this only on purpose.
+#   - python3's http.server does not read .htaccess, so the 301s from the old
+#     flat URLs, the gzip and the immutable caching are all absent here. The
+#     pages and their links are what this checks; the redirects need the real
+#     Apache host.
+serve_site() {
+    local port="${1:-8000}"
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+        echo "❌ Not a usable port: $port"
+        echo "💡 Usage: ./publish.sh --serve [port]   (default 8000)"
+        exit 1
+    fi
+    if [ ! -f "public/index.html" ]; then
+        echo "❌ No built site found at 'public/index.html' - nothing to serve."
+        echo "💡 Run ./publish.sh --build first."
+        exit 1
+    fi
+    echo "--------------------------------------------------"
+    echo "🌐 Serving public/ at http://127.0.0.1:$port"
+    echo "   $(find public -type f | wc -l) files, last built $(date -r public/index.html '+%Y-%m-%d %H:%M')"
+    echo "   Local only, and .htaccess is not applied - old-URL redirects,"
+    echo "   gzip and cache headers need the real host."
+    echo "   Ctrl-C to stop."
+    echo "--------------------------------------------------"
+    # exec: this is the last thing the script does, and handing the process
+    # straight to python means Ctrl-C stops the server instead of being caught
+    # somewhere in between.
+    exec python3 -m http.server "$port" --bind 127.0.0.1 --directory public
 }
 
 # Refuse to upload when there is nothing built. ftp_sync mirrors with --delete,
@@ -432,6 +477,9 @@ case "${1:-}" in
         preview_banner
         echo "💡 When it looks right, ship it with: ./publish.sh --deploy"
         exit 0
+        ;;
+    --serve)
+        serve_site "${2:-}"
         ;;
     --deploy)
         echo "☁️  Deploy Mode. Uploading the existing public/ without rebuilding..."

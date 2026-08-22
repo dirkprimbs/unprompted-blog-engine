@@ -152,10 +152,13 @@ Everything runs through `publish.sh`. The three stages - ingest, build, deploy -
 ./publish.sh              # full pipeline: ingest drafts -> build -> confirm -> deploy
 ./publish.sh --ingest     # drafts -> content/, then stop
 ./publish.sh --build      # content/ -> public/, nothing uploaded (works on a fresh clone)
+./publish.sh --serve      # serve public/ at http://127.0.0.1:8000 so you can look at it
 ./publish.sh --rebuild    # skip AI, rebuild public/ from current content, then deploy
 ./publish.sh --deploy     # upload the existing public/ as-is
 ./publish.sh --help       # full list of modes
 ```
+
+Use `--serve` rather than opening `public/index.html` directly: the site's links are all root-absolute, so over `file://` every stylesheet and every post link points at your filesystem root and 404s. It serves on the loopback address only, so nothing is exposed to the network you happen to be on, and it applies no `.htaccess` - the redirects from old URLs, the gzip and the caching are the real host's job. Pass a port if 8000 is taken: `./publish.sh --serve 8080`.
 
 **Drafting and editorial writing.** Put ideas in `content_pipeline/drafts/` while you work them out; move one to `content_pipeline/sources/` when it's ready for the pipeline.
 
