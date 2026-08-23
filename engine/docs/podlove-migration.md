@@ -117,8 +117,25 @@ URL, cached in `content/remote_audio.json`.
 
 ## 4. site.yaml
 
-Copy the channel block out of the old feed rather than retyping it. The two
-load-bearing values:
+Copy the channel block out of the old feed **verbatim**. Not "as a starting
+point", not tidied, not condensed - verbatim. It is the show's own writing, and
+an import is not the moment to improve it. Getting this wrong is easy and quiet:
+on this project I paraphrased one show's summary and invented the other's
+outright, and both read perfectly plausibly until they were held next to the
+original.
+
+The old feed carries `<description>`, `<itunes:subtitle>` and `<itunes:summary>`,
+which map to `description`, `subtitle` and `summary`. Keep all three even when
+two of them are the same string - condensing them is where the temptation to
+rewrite comes from. Typos in them are the show's typos; leave them.
+
+Verify it afterwards rather than trusting the copy-paste:
+
+```python
+# for description / itunes:subtitle / itunes:summary: old feed == new feed
+```
+
+The two load-bearing values:
 
 ```yaml
 podcast:
@@ -304,6 +321,8 @@ Then:
 - [ ] Cover art ≥1400px square
 - [ ] Favicon replaced (`.ico`, `.png` **and `.svg`**)
 - [ ] robots.txt written
+- [ ] Show description, subtitle and summary carried over **verbatim**, and
+      diffed against the old feed to prove it
 - [ ] `site.language` set BEFORE captioning
 - [ ] Every image audited: captions reviewed, pages/ and remote images done by
       hand, decorative ones left empty
