@@ -233,6 +233,13 @@ display:
   # Topic pills shown before the "Show more topics..." fold on the homepage.
   visible_tags: 10
 
+  # Optional. The heading over the written archive - "Latest Stories" on a
+  # normal site, "Articles" when the podcast has taken over the front page.
+  # Worth setting if your site is not in English and that heading is one of the
+  # few strings a reader actually reads. It is not an i18n system: the rest of
+  # the chrome is still English.
+  # archive_heading: "Artikel"
+
   # Reading speed used for the "N min read" estimate. 200-250 is the usual
   # range for online prose; 225 keeps estimates from feeling rushed.
   words_per_minute: 225

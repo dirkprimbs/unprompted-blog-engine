@@ -34,7 +34,7 @@ from config import (
     LINK_BLUESKY, BLUESKY_CREATOR, SITE_TAGLINE, NAV,
     PAGE_SIZE, FEED_ITEMS, VISIBLE_TAGS, WORDS_PER_MINUTE, TAG_EMOJI,
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
-    PODCAST, PODCAST_ENABLED, REDIRECTS,
+    PODCAST, PODCAST_ENABLED, REDIRECTS, ARCHIVE_HEADING,
 )
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, STATIC_SOURCE_DIRS,
@@ -2246,12 +2246,12 @@ def build_site():
     if at_home:
         archive_posts = [p for p in posts
                          if not (p.get('episode') and p.get('podcast') is not False)]
-        archive_heading = "Articles"
+        archive_heading = ARCHIVE_HEADING or "Articles"
         archive_page_href = archive_href
         archive_stem = ARCHIVE_PAGE_NAME[:-len('.html')]
     else:
         archive_posts = posts
-        archive_heading = "Latest Stories"
+        archive_heading = ARCHIVE_HEADING or "Latest Stories"
         archive_page_href = home_href
         archive_stem = "index"
 

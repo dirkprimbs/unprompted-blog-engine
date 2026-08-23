@@ -465,6 +465,16 @@ def _redirects():
 
 REDIRECTS = _redirects()
 
+# The heading over the written archive. Configurable because a podcast-first
+# site names it in the navigation too, and a page headed "Articles" under a menu
+# item reading "Artikel" is visibly two people's work. Deliberately NOT the start
+# of an i18n system: the rest of the chrome ("Newer", "min read", "Page 1 of 2")
+# is still English, and pretending otherwise with one key would be worse than
+# leaving it alone.
+ARCHIVE_HEADING = str((_cfg.get('display') or {}).get('archive_heading')
+                      or '').strip()
+
+
 # --- Images (all optional; see engine/images.py for what they gate) ---
 # max_width 0 means "never downscale" - conversion still applies.
 IMAGE_MAX_WIDTH = _image_setting('max_width', 1600, allow_zero=True)
