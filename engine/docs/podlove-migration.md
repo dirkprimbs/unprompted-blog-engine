@@ -231,10 +231,13 @@ exposed the gap - but auto-captioning is a floor, not a finish:
   repeated logo makes a screen reader worse, not better. Auto-captioning cannot
   tell the difference; you can.
 
-Alt text goes in **English**, matching what the engine generates, even on a
-German site. (The usual accessibility convention is to match the document
-language, so this is a deliberate house choice rather than an oversight - worth
-knowing before "correcting" it.)
+**Alt text goes in the language of the page.** Set `site.language` in site.yaml
+and the engine writes captions in it, sets `<html lang>` to it, and uses it for
+the feed's `<language>`. This matters more than it looks: a screen reader
+announces the document's language once and pronounces everything inside it
+accordingly, so an English caption on a German page is read with German phonetics
+and comes out as noise. Setting `site.language` is therefore part of the import,
+not a polish step - do it before captioning, or every caption has to be redone.
 
 Audit before deploying:
 
@@ -294,6 +297,7 @@ Then:
 - [ ] Cover art ≥1400px square
 - [ ] Favicon replaced (`.ico`, `.png` **and `.svg`**)
 - [ ] robots.txt written
+- [ ] `site.language` set BEFORE captioning
 - [ ] Every image audited: captions reviewed, pages/ and remote images done by
       hand, decorative ones left empty
 - [ ] `/feed/mp3/` redirect verified **on the host**, not just in the file

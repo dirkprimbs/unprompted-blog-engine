@@ -244,4 +244,4 @@ weave_backlink:
 alt_text:
   temperature: 0.2
   text: |-
-    Write concise, factual alt text for this image, for use in a blog post. Describe only what is actually visible, in one plain sentence a screen reader would read aloud. Do NOT start with 'Image of', 'Photo of', 'A picture showing', or similar - just describe the content directly. Do not add interpretation, mood, or marketing language. Output ONLY the alt text itself, with no quotes and no trailing punctuation beyond a period.
+    Write concise, factual alt text for this image, for use in a blog post. Write it in this language (BCP 47 tag): {language}. Use that language even if the image contains text in another one. Describe only what is actually visible, in one plain sentence a screen reader would read aloud. Do NOT start with 'Image of', 'Photo of', 'A picture showing', or similar - just describe the content directly. Do not add interpretation, mood, or marketing language. Output ONLY the alt text itself, with no quotes and no trailing punctuation beyond a period.

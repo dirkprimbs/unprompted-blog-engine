@@ -35,6 +35,7 @@ from config import (
     PAGE_SIZE, FEED_ITEMS, VISIBLE_TAGS, WORDS_PER_MINUTE, TAG_EMOJI,
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
     PODCAST, PODCAST_ENABLED, REDIRECTS, ARCHIVE_HEADING,
+    SITE_LANGUAGE,
 )
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, STATIC_SOURCE_DIRS,
@@ -827,7 +828,8 @@ def _caption_html_images(text, filename, can_caption):
             continue
         try:
             with open(disk, 'rb') as fh:
-                generated = llm.generate_alt_text(fh.read(), _guess_mime(disk))
+                generated = llm.generate_alt_text(fh.read(), _guess_mime(disk),
+                                                  language=SITE_LANGUAGE)
         except SystemExit:
             # llm.call_model exits on repeated API failure; one caption is not
             # worth the build.
@@ -1031,7 +1033,8 @@ def process_content_media():
             new_alt = alt
             if image_for_alt is not None:
                 try:
-                    generated = llm.generate_alt_text(*image_for_alt)
+                    generated = llm.generate_alt_text(*image_for_alt,
+                                                      language=SITE_LANGUAGE)
                     if generated:
                         new_alt = generated
                         print(f"   🖼️  Alt text for {os.path.basename(new_src)}: {generated}")
@@ -1781,6 +1784,7 @@ def safe_render(template, mappings):
     # entirely on a site with no tagline. Escaping happens inside the builders,
     # element by element, since these are the one place author text becomes
     # markup rather than an attribute value.
+    mappings.setdefault("%SITE_LANG%", esc(SITE_LANGUAGE))
     mappings.setdefault("%HEADER_NAV%", _header_nav_html())
     mappings.setdefault("%SUBSCRIBE_ITEM%", _subscribe_item_html())
     mappings.setdefault("%SITE_BRANDING%", _site_branding_html())
@@ -1957,7 +1961,7 @@ def rss_feed_xml(posts_list, feed_title, feed_desc, self_path, last_build_date_r
     <title>{html.escape(feed_title, quote=True)}</title>
     <link>{SITE_URL}/index.html</link>
     <description>{html.escape(feed_desc, quote=True)}</description>
-    <language>en-us</language>
+    <language>{SITE_LANGUAGE}</language>
     <lastBuildDate>{last_build_date_rfc}</lastBuildDate>
     <atom:link href="{SITE_URL}/{self_path}" rel="self" type="application/rss+xml" />
 {channels}

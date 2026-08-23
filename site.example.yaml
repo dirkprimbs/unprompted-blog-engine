@@ -20,6 +20,17 @@ site:
   # Leave it out for the compact single-row header.
   # tagline: "Notes on things I build."
 
+  # Optional. The language the site is written in, as a BCP 47 tag ("en",
+  # "de", "en-GB"). Defaults to English, which is what every site.yaml written
+  # before this key existed means.
+  #
+  # Not decoration: it sets <html lang>, which tells a screen reader how to
+  # pronounce the page, it sets <language> in the feed, and it decides which
+  # language the engine writes alt text in. Alt text in the wrong language is
+  # announced with the wrong phonetics, which is worse than terse alt text in
+  # the right one.
+  # language: "de"
+
   # Canonical base URL. No trailing slash. Every internal link, the sitemap,
   # both feeds, and the announcement toot are built from this, so it must match
   # where the site is really served or links will point at the wrong host.

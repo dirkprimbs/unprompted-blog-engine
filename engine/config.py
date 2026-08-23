@@ -124,6 +124,16 @@ LINK_ABOUT = str(_cfg['links']['about'])
 # %SITE_BRANDING%.
 SITE_TAGLINE = str(_cfg['site'].get('tagline') or '').strip()
 
+# The language the site is written in, as a BCP 47 tag. Not in _REQUIRED: every
+# site.yaml written before this key existed means English, which is what it
+# defaults to.
+#
+# It is not decoration. It sets <html lang>, which tells a screen reader how to
+# pronounce the page, and it decides which language the engine writes alt text
+# in - alt text in the wrong language is read aloud with the wrong phonetics,
+# which is worse than terse alt text in the right one.
+SITE_LANGUAGE = str(_cfg['site'].get('language') or 'en').strip()
+
 
 def _optional_link(key):
     """One optional links.* string, empty when unset.
@@ -380,7 +390,7 @@ def _podcast():
         'author': _opt('author') or AUTHOR_NAME,
         'owner_name': _opt('owner_name') or AUTHOR_NAME,
         'owner_email': _opt('owner_email') or AUTHOR_EMAIL,
-        'language': _opt('language') or 'en',
+        'language': _opt('language') or SITE_LANGUAGE,
         'copyright': _opt('copyright'),
         # Set this ONLY while moving the show to a different feed URL: it tells
         # every subscribed app to follow the new address permanently, and an

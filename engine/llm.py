@@ -180,7 +180,7 @@ def call_model(prompt, role=UTILITY, temperature=0.2, image=None):
     sys.exit(1)
 
 
-def generate_alt_text(image_bytes, mime_type):
+def generate_alt_text(image_bytes, mime_type, language='en'):
     """Return a concise, factual alt-text string for an image, using the IMAGE
     role's vision model. Alt text describes the image for screen-reader users
     and for when the image fails to load, so it should state what is shown
@@ -188,8 +188,14 @@ def generate_alt_text(image_bytes, mime_type):
 
     The wording lives in prompts.yaml under 'alt_text'.
 
+    `language` is the site's own language (config.SITE_LANGUAGE), because alt
+    text belongs in the language of the page it sits on: a screen reader
+    announces the document's language once and pronounces everything in it
+    accordingly, so an English sentence inside a German page is read with German
+    phonetics and comes out as noise.
+
     Returns a single trimmed line (never multi-line, never wrapped in quotes)."""
-    raw = call_model(prompts.render('alt_text'), role=IMAGE,
+    raw = call_model(prompts.render('alt_text', language=language), role=IMAGE,
                      temperature=prompts.temperature('alt_text'),
                      image=(image_bytes, mime_type))
     # Collapse to a single clean line: models occasionally wrap the answer in
