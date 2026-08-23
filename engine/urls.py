@@ -165,20 +165,33 @@ def htaccess_content(redirects=()):
     configured = ""
     if redirects:
         lines = ["\n    # --- From site.yaml's redirects: ---\n"]
+        # Matched against %{REQUEST_URI}, the URI as the client sent it,
+        # rather than against the per-directory path RewriteRule normally sees.
+        #
+        # That is not belt-and-braces, it is required on any host with
+        # MultiViews enabled - which is most shared hosting. With MultiViews,
+        # Apache resolves '/feed' to the real file 'feed.xml' before the
+        # per-directory rules run, and a rule written as '^feed/' then never
+        # matches a request for '/feed/mp3/'. The failure is beautifully
+        # confusing: every redirect on the site works except the ones whose
+        # prefix happens to collide with a filename, and that collision is
+        # exactly what a feed redirect is made of. REQUEST_URI is the original
+        # request and negotiation cannot have touched it.
         for source, target in redirects:
-            escaped = re.escape(source.lstrip('/'))
+            escaped = re.escape('/' + source.lstrip('/'))
             if target.endswith('/'):
                 # A directory move: carry the rest of the path across, or
                 # /episoden/x.mp3 -> /audio/ would drop the filename and land
-                # every old episode URL on an empty directory. RewriteRule
-                # replaces the whole path, not just the part that matched.
-                lines.append(f"    RewriteRule ^{escaped}(.*)$ {target}$1 "
-                             f"[R=301,L]\n")
+                # every old episode URL on an empty directory. The remainder is
+                # captured by the condition, so it is %1 here and not $1.
+                lines.append(f"    RewriteCond %{{REQUEST_URI}} ^{escaped}(.*)$\n")
+                lines.append(f"    RewriteRule ^ {target}%1 [R=301,L]\n")
             else:
                 # A single destination: everything under the prefix goes to the
                 # one page, which is what /feed/mp3/index.xml -> /podcast.xml
                 # needs.
-                lines.append(f"    RewriteRule ^{escaped} {target} [R=301,L]\n")
+                lines.append(f"    RewriteCond %{{REQUEST_URI}} ^{escaped}\n")
+                lines.append(f"    RewriteRule ^ {target} [R=301,L]\n")
         configured = "".join(lines)
 
     return (
