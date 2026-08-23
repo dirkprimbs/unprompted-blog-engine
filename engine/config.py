@@ -236,6 +236,32 @@ VISIBLE_TAGS = _int('display', 'visible_tags')
 WORDS_PER_MINUTE = _int('display', 'words_per_minute')
 
 
+def _header():
+    """The `header:` section: which pieces of engine furniture the header shows.
+
+    Only the RSS link so far, and only because two sites wanted it gone for the
+    same reason - a landing page has no stream to follow, and on a podcast-only
+    site the blog feed sits next to the podcast feed and invites the wrong
+    subscription. A variation that recurs is config; a variation that does not
+    is what templates/base.html is for.
+
+    The feed is still built and still advertised by <link rel="alternate"> in
+    the head, so turning the link off hides a menu item, it does not hide the
+    feed.
+    """
+    raw = _cfg.get('header') or {}
+    if not isinstance(raw, dict):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': header must be a mapping of settings "
+              f"(got {type(raw).__name__}).")
+    return {
+        'rss': str(raw.get('rss', True)).strip().lower()
+               not in ('false', 'no', '0', 'off'),
+    }
+
+
+HEADER = _header()
+
+
 def _tag_emoji():
     """Optional decoration: an emoji shown beside a tag wherever it is rendered.
 

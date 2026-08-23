@@ -111,9 +111,10 @@
                          is one, the engine's built-in About/social/Contact list
                          when there isn't. See _header_nav_html(). -->
                     %HEADER_NAV%
-                    <a href="/feed.xml" target="_blank" style="display: inline-flex; align-items: center; gap: 5px;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg>RSS
-                    </a>
+                    <!-- The RSS link, unless site.yaml's header.rss is false.
+                         The feed is built and advertised in the head either
+                         way; this only decides whether it takes a menu slot. -->
+                    %HEADER_RSS%
                     <button type="button" class="theme-toggle" aria-label="Theme: follow system. Click for light." title="Theme: follow system. Click for light.">
                         <svg class="icon-auto" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
                         <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>

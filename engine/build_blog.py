@@ -35,7 +35,7 @@ from config import (
     PAGE_SIZE, FEED_ITEMS, VISIBLE_TAGS, WORDS_PER_MINUTE, TAG_EMOJI,
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
     PODCAST, PODCAST_ENABLED, REDIRECTS, ARCHIVE_HEADING,
-    SITE_LANGUAGE, THEME,
+    SITE_LANGUAGE, THEME, HEADER,
 )
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, SITE_TEMPLATE_PATH, STATIC_SOURCE_DIRS,
@@ -1395,6 +1395,27 @@ def generate_post_feed_html(posts_list, title_text, current_page=1, total_pages=
 _SUBSCRIBE_BUTTON_ID = 'header-subscribe'
 
 
+def _header_rss_html():
+    """The header's RSS link, or '' when site.yaml turns it off.
+
+    Turning it off hides a menu item and nothing else: the feed is still built,
+    and the <link rel="alternate"> in the head still advertises it to anything
+    that looks for one.
+    """
+    if not HEADER['rss']:
+        return ''
+    return (
+        '<a href="/feed.xml" target="_blank" '
+        'style="display: inline-flex; align-items: center; gap: 5px;">'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" '
+        'viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" '
+        'style="flex-shrink: 0;"><path d="M4 11a9 9 0 0 1 9 9"></path>'
+        '<path d="M4 4a16 16 0 0 1 16 16"></path>'
+        '<circle cx="5" cy="19" r="1"></circle></svg>RSS</a>'
+    )
+
+
 def _subscribe_item_html():
     """The Subscribe control in the header, on every page of a podcast site.
 
@@ -1959,6 +1980,7 @@ def safe_render(template, mappings):
     mappings.setdefault("%THEME_OVERRIDES%", _theme_overrides_html())
     mappings.setdefault("%HEADER_NAV%", _header_nav_html())
     mappings.setdefault("%SUBSCRIBE_ITEM%", _subscribe_item_html())
+    mappings.setdefault("%HEADER_RSS%", _header_rss_html())
     mappings.setdefault("%SITE_BRANDING%", _site_branding_html())
     # Same reasoning one level up: the meta tag exists to make Mastodon show the
     # author's handle on link previews, so with no handle configured the whole

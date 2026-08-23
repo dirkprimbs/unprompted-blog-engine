@@ -221,6 +221,19 @@ links:
 # gitignored, so it stays with this deployment. The build says so when it uses
 # one, and warns about placeholders the engine has since added.
 
+# --- Header (optional) -------------------------------------------------------
+# Which engine furniture the header shows. The search box, the theme toggle and
+# the subscribe button are always there; only the RSS link is optional so far.
+#
+# Turn it off for a site with no stream worth following, or for a podcast-only
+# site where the blog feed sits next to the podcast feed and invites the wrong
+# subscription. The feed is still built and still advertised by the
+# <link rel="alternate"> in the head - this only decides whether it takes up a
+# slot in the menu.
+#
+# header:
+#   rss: false
+
 # --- Redirects (optional) ----------------------------------------------------
 # Old path -> new path, emitted as 301s at the top of the generated .htaccess.
 # A list of single-key pairs rather than one mapping, because the order Apache
