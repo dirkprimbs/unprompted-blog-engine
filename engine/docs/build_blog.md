@@ -720,3 +720,7 @@ Never deletes public/ wholesale: every write goes through
 write_file_if_changed / copy_asset_if_changed so unchanged files keep
 their mtime and lftp's mirror skips re-uploading them.
 
+---
+
+Migrating a podcast onto this engine is documented separately in
+[`podlove-migration.md`](podlove-migration.md).
