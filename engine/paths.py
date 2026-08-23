@@ -68,6 +68,11 @@ STATIC_SOURCE_DIRS = (THEME_STATIC_DIR, SITE_STATIC_DIR)
 # --- Compiled output ---
 PUBLIC_DIR = os.path.join(REPO_ROOT, "public")
 PUBLIC_ASSETS_DIR = os.path.join(PUBLIC_DIR, "assets")
+# Episode audio is kept out of assets/ deliberately. An enclosure URL is quoted
+# in feeds, in podcast directories and in other people's players, and it has to
+# keep working for years - so it lives at a short, stable, obviously-audio path
+# rather than sharing a directory with images the build rewrites and re-encodes.
+PUBLIC_AUDIO_DIR = os.path.join(PUBLIC_DIR, "audio")
 
 # --- Content pipeline ---
 # Everything about this author's writing, as opposed to the engine that processes
@@ -75,6 +80,11 @@ PUBLIC_ASSETS_DIR = os.path.join(PUBLIC_DIR, "assets")
 PIPELINE_DIR = os.path.join(REPO_ROOT, "content_pipeline")
 CONTENT_DIR = os.path.join(PIPELINE_DIR, "content")
 CONTENT_ASSETS_DIR = os.path.join(CONTENT_DIR, "assets")
+# Episode masters, mirrored to PUBLIC_AUDIO_DIR at build time. Unlike
+# CONTENT_ASSETS_DIR this really is an archive rather than a derived cache:
+# nothing here is ever re-encoded or rewritten, because the file the author
+# uploaded is the one listeners downloaded and it has to stay byte-identical.
+CONTENT_AUDIO_DIR = os.path.join(CONTENT_DIR, "audio")
 # content_pipeline/drafts/ deliberately has no constant here: it is the human
 # drafting workspace and no engine code reads it, so giving it one would only
 # create an unused name to keep in sync.
@@ -96,6 +106,12 @@ TEMPLATE_MD_PATH = os.path.join(PIPELINE_DIR, "TEMPLATE.md")
 # backlinking step reads. Written by build_blog.py, consumed by ingest.py.
 LINK_MANIFEST_PATH = os.path.join(CONTENT_DIR, "link_manifest.json")
 EXISTING_TAGS_PATH = os.path.join(CONTENT_DIR, "existing_tags.json")
+
+# Byte lengths of remote enclosures, keyed by URL. An <enclosure> must carry a
+# length and a remote file cannot be stat'd, so the build asks the host once
+# with a HEAD request and remembers the answer here - which is what keeps a
+# migrated back catalogue building offline after the first run.
+REMOTE_AUDIO_LEDGER_PATH = os.path.join(CONTENT_DIR, "remote_audio.json")
 
 # Comment moderation: which Mastodon replies this site declines to reproduce
 # (and, for threads switched to curated mode, which ones it will). Unlike the

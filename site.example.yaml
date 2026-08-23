@@ -111,6 +111,79 @@ links:
 #         href: "https://mastodon.social/@example"
 
 
+
+# --- Podcast (wholly optional) -----------------------------------------------
+# Leave this section out entirely and the engine publishes text exactly as
+# before: no podcast feed, no /podcast.html, no player.
+#
+# Add it and any post that links an audio file on a line of its own becomes an
+# episode - the file is copied into public/audio/, the link becomes a player,
+# and the episode joins /podcast.xml. A post that links audio but should NOT be
+# an episode sets `podcast: false` in its own frontmatter.
+#
+# Unlike the rest of this file, every key here is validated hard. A blog with a
+# bad setting renders wrong and you notice; a podcast with a bad setting builds
+# a feed that looks fine and is rejected by Apple days later, or accepted with
+# the wrong owner - at which point you cannot claim your own show.
+#
+# podcast:
+#   # Shown in directories and in the button. Often the same as site.name, but
+#   # it does not have to be - a blog can host a show with its own identity.
+#   title: "Example Podcast"
+#
+#   # One line under the title. Optional.
+#   subtitle: "Two people talking about one thing."
+#
+#   # What the show is. This is the text every podcast app displays.
+#   description: >
+#     A longer description of the show, a paragraph or two. Plain text.
+#
+#   # Cover art: root-absolute path to a file this site serves, so put it in
+#   # public_static/. Apple wants square, 1400-3000px, JPEG or PNG - a smaller
+#   # or non-square image is rejected silently at submission.
+#   cover: "/podcast-cover.png"
+#
+#   # One of Apple's top-level categories, spelled exactly as they spell it.
+#   # The engine refuses to build on a typo and prints the valid list.
+#   category: "Technology"
+#   # subcategory: "Technology"
+#
+#   # Required by Apple - a feed without it is rejected.
+#   explicit: false
+#
+#   # 'episodic' (newest first, the usual) or 'serial' (meant to be heard in
+#   # order from episode 1).
+#   type: episodic
+#
+#   # These four default to the blog's own values above; set them only if the
+#   # show differs. owner_email is what Apple mails to verify you own the show,
+#   # so it must be an address you can read.
+#   # author: "Example Author"
+#   # owner_name: "Example Author"
+#   # owner_email: "you@example.com"
+#   # language: "en"
+#   # copyright: "© 2026 Example Author"
+#
+#   # Fill colour for the Podlove subscribe button. It renders in an iframe and
+#   # cannot see the theme's CSS, so this repeats the accent from style.css -
+#   # change both together if you change either.
+#   # button_color: "#0C7C74"
+#
+#   # <podcast:locked> - 'true' (the default) stops a hosting platform importing
+#   # this feed and claiming the show as theirs.
+#   # locked: true
+#
+#   # Set ONLY while moving the show to a new feed URL: every subscribed app
+#   # follows it permanently, so a stray value hands your audience away.
+#   # new_feed_url: "https://example.com/podcast.xml"
+#
+#   # Directory links, shown as plain pills beside the subscribe button. Any
+#   # name works; it is title-cased for the label.
+#   # links:
+#   #   apple: "https://podcasts.apple.com/..."
+#   #   spotify: "https://open.spotify.com/show/..."
+#   #   fyyd: "https://fyyd.de/podcast/..."
+
 footer:
   # The AI transparency label and its explanation. Set label to an empty string
   # if you would rather not display one; to change the footer's markup itself,

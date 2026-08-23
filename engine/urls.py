@@ -22,6 +22,14 @@ from config import SITE_URL
 POSTS_DIR = "posts"
 TAGS_DIR = "tags"
 FEEDS_DIR = "feeds"
+AUDIO_DIR = "audio"
+
+# The podcast feed sits at the root beside feed.xml rather than under FEEDS_DIR,
+# which holds per-tag feeds. This one is a site-level feed, and more to the
+# point it is the URL people paste into podcast apps and directories submit to -
+# so it wants to be short, memorable and never reorganised.
+PODCAST_FEED_NAME = "podcast.xml"
+PODCAST_PAGE_NAME = "podcast.html"
 
 def post_href(slug):
     """Root-absolute URL path for a post page. `slug` already ends in '.html'."""
@@ -46,6 +54,23 @@ def tag_feed_href(tag_slug):
 def home_href(page=1):
     """Root-absolute URL path for the homepage / its pagination."""
     return "/index.html" if page == 1 else f"/index-{page}.html"
+
+def audio_href(name):
+    """Root-absolute URL path for a hosted episode file.
+
+    `name` is the bare filename, kept exactly as the author named it - see
+    process_content_media(). That is what makes an old-host redirect a single
+    rewrite rule instead of a table with one line per episode.
+    """
+    return f"/{AUDIO_DIR}/{name}"
+
+def podcast_feed_href():
+    """Root-absolute URL path for the podcast (iTunes) feed."""
+    return f"/{PODCAST_FEED_NAME}"
+
+def podcast_href():
+    """Root-absolute URL path for the generated podcast index page."""
+    return f"/{PODCAST_PAGE_NAME}"
 
 def slugify_tag(tag):
     """URL/filename-safe slug for a tag. Only affects links and filenames -
@@ -153,8 +178,26 @@ def htaccess_content():
         '    <FilesMatch "^(style|fonts)\\.css$">\n'
         '        Header set Cache-Control "public, max-age=31536000, immutable"\n'
         "    </FilesMatch>\n"
-        '    <FilesMatch "^(comments|dompurify\\.min)\\.js$">\n'
+        '    <FilesMatch "^(comments|podcast|dompurify\\.min)\\.js$">\n'
         '        Header set Cache-Control "public, max-age=31536000, immutable"\n'
+        "    </FilesMatch>\n"
+        "\n"
+        "    # The vendored Podlove subscribe button. Not content-addressed, but\n"
+        "    # it only changes when fetch_podlove.py is re-run, which is roughly\n"
+        "    # never - and it is 190KB of JavaScript, so leaving it to the\n"
+        "    # browser default would cost a fresh download on every podcast page.\n"
+        "    # Matched by filename because .htaccess cannot scope by directory;\n"
+        "    # if you ever add your own app.js to public_static/, rename it.\n"
+        '    <FilesMatch "^app\\.(js|css)$">\n'
+        '        Header set Cache-Control "public, max-age=2592000"\n'
+        "    </FilesMatch>\n"
+        "\n"
+        "    # Episode audio. A month rather than immutable: an enclosure URL is\n"
+        "    # forever, but the bytes behind it are not quite - a re-cut episode\n"
+        "    # is re-uploaded under the same name so the feed stays valid. Not in\n"
+        "    # the DEFLATE list above either; compressed audio does not compress.\n"
+        '    <FilesMatch "\\.(mp3|m4a|mp4|ogg|opus|wav|aac)$">\n'
+        '        Header set Cache-Control "public, max-age=2592000"\n'
         "    </FilesMatch>\n"
         "\n"
         "    # Images and icons are not content-addressed - re-exporting a photo\n"

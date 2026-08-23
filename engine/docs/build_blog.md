@@ -441,6 +441,199 @@ is the link builder for the surrounding section - home_href for the
 homepage, a tag-bound lambda for a tag page - so the same feed markup
 serves both without knowing which it is on.
 
+### `_standalone_link(line)`
+
+The link target of a line that is *nothing but* a link, else None. Accepts a
+bare URL alone on its line or a Markdown link that is the whole line.
+
+This is the engine's rule for "the author meant to embed this, not to mention
+it" - an inline link inside a sentence stays a link, because replacing it with a
+player or a video would break the sentence around it. Shared by
+`embed_youtube()` and `embed_audio()` so the two can never drift into
+disagreeing about what counts, which an author would experience as the engine
+being arbitrary.
+
+### `_host_audio_links(text, filepath, filename, audio_claims)`
+
+Copy any standalone *local* audio link into `content_pipeline/content/audio/`,
+mirror it into `public/audio/`, and rewrite the Markdown to point at the hosted
+copy. Returns `(text, changed)`. Called from `process_content_media()`.
+
+**Audio keeps the author's filename; images do not.** `screenshot.png` collides
+constantly, so images are namespaced `<post>_<name>`. An enclosure URL is quoted
+in feeds, in directories and in other people's players and has to survive for
+years, so it stays what the author called it - which is also what lets a show
+migrating from another host redirect its whole back catalogue with one rewrite
+rule instead of a per-episode table.
+
+Remote URLs are left completely alone: that is what lets a migrated show keep
+serving its old episodes from wherever they already live while new ones are
+hosted here, in one feed, with no redirects.
+
+### `_claim_audio(audio_claims, name, filename, disk_path)`
+
+Record which post owns a hosted audio filename and fail loudly on a clash. Two
+posts pointing at the *same* file is fine (a trailer and its episode); two
+different files sharing one basename is fatal, because the second copy would
+overwrite the first and one episode would quietly serve another's audio - a bug
+no listener would report and everyone would hear.
+
+### `_remote_audio_size(url)` / `_remote_audio_ledger()`
+
+Byte length of a remote enclosure, asking the host at most once ever and caching
+the answer in `content_pipeline/content/remote_audio.json`.
+
+An `<enclosure>` must declare a length and a file on someone else's host cannot
+be `stat`'d. For a migrated show these URLs are the normal case, so re-asking
+every build would make an offline build impossible and a fifty-episode build
+slow. Returns 0 when the host will not say - a legal value every client
+tolerates, costing a progress bar rather than the feed.
+
+### `_player_html(episode)`
+
+The episode player: cover, show name, one big play control, progress bar, and
+the secondary actions under a dotted rule.
+
+Progressive enhancement, which matters more here than anywhere else on the site:
+the markup ships a real `<audio controls>` and `static/podcast.js` only hides it
+once it has taken over. A page whose player fails to initialise is still a page
+you can play the episode from - and an episode page that cannot play its episode
+has no content at all.
+
+### `embed_audio(markdown_text, meta)`
+
+Turn a standalone audio link into a player and describe the episode. The audio
+counterpart of `embed_youtube()`, using the same `_standalone_link()` rule.
+
+Returns `(markdown, episode_or_None)`; the episode dict (`url`, `bytes`,
+`seconds`, `mime`) is put on the post's meta as `meta['episode']`, which is how
+`build_site()` tells an episode from an ordinary post without re-parsing
+anything.
+
+**First link wins.** A post may render several players (an episode and its
+trailer), but RSS allows one enclosure per item. First rather than largest or
+last means the author decides by writing order, which is the only rule that is
+obvious from reading the post.
+
+### `show_guid()`
+
+The channel-level `<podcast:guid>`: a UUIDv5 of the feed URL with protocol and
+trailing slash removed, in the namespace the Podcasting 2.0 spec fixes.
+Deterministic by definition, so unlike an episode GUID it is computed every
+build rather than stored. It is what lets Podcast Index and the directories
+following it keep tracking the show if the feed itself moves.
+
+### `ensure_episode_guids(posts)`
+
+Give every episode a permanent GUID, writing it into the post's frontmatter the
+first time and never touching it again.
+
+**The most consequential value the engine emits.** A podcast client decides
+"have I already got this?" by GUID alone. If one changes, every subscriber's app
+treats that episode as new and re-downloads it; if they all change, the entire
+back catalogue is re-delivered with a notification each. Apple's rule is that it
+must never change, for any reason.
+
+Which is why it cannot be derived at render time from anything visible. A
+URL-derived GUID breaks the day a slug is tidied or the site moves domain - both
+things this engine makes easy, neither of which feels like it should have
+consequences. So the value is minted once and *stored*, in the same
+`content/*.md` the build already writes image paths and alt text into.
+
+The minted value is a UUIDv5 of site URL plus slug, so a regenerated file
+reproduces it. Once written it is read, never recomputed, and never validated: a
+migrated episode carries its old host's GUID verbatim
+(`podlove-2015-01-01t12:00:00+00:00-a1b2c3` is a perfectly good GUID, and
+rewriting it as a tidy UUID would re-deliver the archive it was kept to
+protect). A GUID that cannot be written is a **fatal** error, not a warning - it
+produces a valid-looking feed today and changes the first time a slug does.
+
+### `strip_player(html_body)`
+
+Remove the on-page player from a body bound for a feed.
+
+A podcast client has its own player and gets the audio from the `<enclosure>`;
+shipping ours inside the shownotes gives a second, dead set of controls and
+drops the player's chrome ("Download", "All episodes", the duration) into
+`<itunes:summary>`, where it reads as part of the description. It also keeps the
+player's root-relative `/audio/` and cover URLs out of the feed, since only
+`/assets/` and `/posts/*.html` are promoted to absolute for feed readers.
+
+Matched by counting `<div>` depth, not with a regex: the player nests several
+levels and a non-greedy pattern stops at the first `</div>`, removing the class
+name that would have shown you most of the block was still there.
+
+### `_cdata(text)`
+
+Wrap text in CDATA, splitting any literal `]]>` that would end the section
+early. A post quoting that sequence - talking about XML, or about this very
+problem - otherwise produces a feed no reader can parse.
+
+### `item_pubdate(post)`
+
+RFC-2822 publication date for a feed item. `published:` wins over `date:` when
+present, because `date:` is day-precision and two episodes released on one day
+would tie and be ordered arbitrarily. That matters for an imported archive,
+where the feed being replaced had real timestamps and subscribers would see the
+order change.
+
+### `_episode_xml(post)`
+
+The `<enclosure>` and `<itunes:duration>` for the **main** `feed.xml`, or `''`
+for a post that is not an episode. The blog feed carries the enclosure too, so
+an ordinary RSS reader can play an episode without subscribing twice.
+
+### `podcast_item_xml(post)` / `podcast_feed_xml(episodes, last_build_date_rfc)`
+
+The iTunes/Podcasting 2.0 feed. Deliberately siblings of `rss_item_xml()` and
+`rss_feed_xml()` rather than parameterisations of them, because the two feeds
+want different things from the same posts: this item's guid is the stored
+permanent identifier rather than the post URL, and almost every channel element
+differs - the language and `<link>` come from config instead of being
+hard-coded, and the whole iTunes block has no counterpart in a blog feed.
+
+Everything Apple requires is emitted unconditionally, since a feed missing one
+is rejected at submission with a message naming the tag but not the reason.
+`<itunes:summary>` is plain text via `plain_text()` capped at 4000 chars - Apple
+rejects markup there even though `<description>` allows it. Not emitted:
+`<itunes:block>` and `<itunes:complete>` (harmful unless meant),
+`<managingEditor>`/`<webMaster>` (publish an email in plain text for no
+benefit), `<itunes:keywords>` (deprecated).
+
+The feed is never capped at `FEED_ITEMS`. A blog feed is a what's-new list; a
+podcast feed is the show's whole catalogue, and an episode falling out of it
+disappears from every directory and every app's back catalogue.
+
+### `_podlove_button_html()`
+
+The vendored Podlove subscribe button, configured inline.
+
+Config goes in a global rather than through the widget's `data-json-url`,
+because a failed fetch there is swallowed with a `console.debug` and no button
+appears - exactly the failure nobody notices on their own site. Inline, the
+config either renders with the page or does not exist.
+
+**The `javascripts/` segment in the src is load-bearing**: the widget finds its
+stylesheet, its iframe and its ninety-odd app logos by stripping that segment
+off its own `src`. See `engine/fetch_podlove.py`.
+
+### `_format_bytes(size)`
+
+A file size a listener can act on - MB for an episode, KB for a clip. Integer
+megabytes alone print "0 MB" for anything under one, and a download size of zero
+reads as an error rather than as "small".
+
+### `_episode_row_html(post)` / `build_podcast_page(base_template, episodes, sitemap_urls)`
+
+The show header, the subscribe options and every episode, written to
+`public/podcast.html`.
+
+Called from `build_site()` **before** `render_standalone_pages()`, so a
+hand-written `content_pipeline/pages/podcast.md` overrides it - the same
+precedence that already lets `pages/index.md` replace the generated homepage. A
+show with a real about-page to write should not have to fight the generator for
+its own URL. Appends to `sitemap_urls` before the sitemap is frozen.
+
 ### `safe_render(template, mappings)`
 
 Substitute %PLACEHOLDER% values into the base template.

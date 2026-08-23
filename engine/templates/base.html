@@ -238,5 +238,10 @@
          Emitted only on pages that actually carry a thread, so the homepage and
          tag pages never fetch it. Nothing loads until the reader clicks. -->
     %COMMENTS_SCRIPT%
+
+    <!-- The episode player (see static/podcast.js). Emitted only by pages that
+         carry a player, so an ordinary post never fetches it. The <audio> it
+         enhances works on its own if this never loads. -->
+    %PODCAST_SCRIPT%
 </body>
 </html>

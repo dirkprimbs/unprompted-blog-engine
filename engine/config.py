@@ -279,6 +279,131 @@ def _image_setting(key, default, allow_zero=False):
     return number
 
 
+
+# --- Podcast (wholly optional) -----------------------------------------------
+
+# The iTunes categories Apple accepts. Validated against this list because a
+# typo here is not a broken page you would notice - the feed still builds, and
+# Apple rejects or silently miscategorises the show days later. Subcategories
+# are not enumerated: they are numerous, they change, and a wrong one is
+# survivable in a way a wrong top-level category is not.
+_ITUNES_CATEGORIES = (
+    'Arts', 'Business', 'Comedy', 'Education', 'Fiction', 'Government',
+    'History', 'Health & Fitness', 'Kids & Family', 'Leisure', 'Music',
+    'News', 'Religion & Spirituality', 'Science', 'Society & Culture',
+    'Sports', 'Technology', 'True Crime', 'TV & Film',
+)
+
+
+def _podcast():
+    """The `podcast:` section, or None when the site has no podcast.
+
+    Absent is the normal case and costs nothing: with no section the engine
+    emits no podcast feed, no /podcast.html and no player, and every site.yaml
+    written before this key existed is untouched.
+
+    Present means validated hard, and harder than the rest of this file. The
+    reason is the failure mode: a blog with a bad config renders wrong and you
+    see it. A podcast with a bad config builds a feed that looks fine, gets
+    submitted to Apple, and is rejected - or worse, accepted with the wrong
+    owner, at which point you cannot claim your own show. Everything Apple
+    requires is therefore required here too, spelled out rather than defaulted
+    to something plausible.
+
+    The exceptions are the four keys the blog already knows - author, owner
+    name, owner email, language - which default to the site's own values. Making
+    someone write their own name twice in one file is not validation, it is
+    friction.
+    """
+    raw = _cfg.get('podcast')
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': podcast must be a mapping of settings "
+              f"(got {type(raw).__name__}).")
+
+    def _need(key):
+        value = str(raw.get(key) or '').strip()
+        if not value:
+            _fail(f"❌ '{SITE_CONFIG_PATH}': podcast.{key} is required once a "
+                  f"podcast: section exists.",
+                  f"   Remove the whole section to publish without a podcast.")
+        return value
+
+    def _opt(key, default=''):
+        value = raw.get(key)
+        return default if value is None else str(value).strip()
+
+    category = _need('category')
+    if category not in _ITUNES_CATEGORIES:
+        _fail(f"❌ '{SITE_CONFIG_PATH}': podcast.category must be one of "
+              f"Apple's categories (got {category!r}).",
+              f"   Valid: {', '.join(_ITUNES_CATEGORIES)}")
+
+    cover = _need('cover')
+    if not cover.startswith('/'):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': podcast.cover must be a root-absolute "
+              f"path to a file the site serves, e.g. '/podcast-cover.png' "
+              f"(got {cover!r}).")
+
+    # Apple wants a literal 'true'/'false' string. A YAML boolean, the strings
+    # 'yes'/'no', and the words themselves all mean the same thing to an author
+    # and none of them are what the feed needs, so normalise all of them.
+    explicit = raw.get('explicit')
+    if explicit is None:
+        _fail(f"❌ '{SITE_CONFIG_PATH}': podcast.explicit is required - Apple "
+              f"rejects a feed without it. Use true or false.")
+    explicit = str(explicit).strip().lower() in ('true', 'yes', '1', 'on')
+
+    show_type = _opt('type', 'episodic').lower()
+    if show_type not in ('episodic', 'serial'):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': podcast.type must be 'episodic' or "
+              f"'serial' (got {show_type!r}).")
+
+    links = raw.get('links') or {}
+    if not isinstance(links, dict):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': podcast.links must be a mapping of "
+              f"directory name to URL (got {type(links).__name__}).")
+
+    return {
+        'title': _need('title'),
+        'subtitle': _opt('subtitle'),
+        'description': _need('description'),
+        'cover': cover,
+        'category': category,
+        'subcategory': _opt('subcategory'),
+        'explicit': explicit,
+        'type': show_type,
+        # These four fall back to the blog's own identity rather than being
+        # required again. owner_email is what Apple mails to verify ownership,
+        # so it defaults to the address the site already publishes.
+        'author': _opt('author') or AUTHOR_NAME,
+        'owner_name': _opt('owner_name') or AUTHOR_NAME,
+        'owner_email': _opt('owner_email') or AUTHOR_EMAIL,
+        'language': _opt('language') or 'en',
+        'copyright': _opt('copyright'),
+        # Set this ONLY while moving the show to a different feed URL: it tells
+        # every subscribed app to follow the new address permanently, and an
+        # accidental value points your listeners somewhere you did not mean.
+        'new_feed_url': _opt('new_feed_url'),
+        # <podcast:locked> - 'yes' stops a hosting platform importing this feed
+        # and claiming the show. Defaults to locked, since the safe answer is
+        # the one that does nothing until you ask for it.
+        'locked': str(raw.get('locked', True)).strip().lower()
+                  in ('true', 'yes', '1', 'on'),
+        'links': {str(k): str(v) for k, v in links.items() if v},
+        # Fill colour for the Podlove subscribe button, which renders inside an
+        # iframe and so cannot read the theme's CSS custom properties. The
+        # default is the engine's own --accent; if you changed that in
+        # style.css, set this to the same value or the button will be the one
+        # element on the page in the old colour.
+        'button_color': _opt('button_color') or '#0C7C74',
+    }
+
+
+PODCAST = _podcast()
+PODCAST_ENABLED = PODCAST is not None
+
 # --- Images (all optional; see engine/images.py for what they gate) ---
 # max_width 0 means "never downscale" - conversion still applies.
 IMAGE_MAX_WIDTH = _image_setting('max_width', 1600, allow_zero=True)

@@ -1136,3 +1136,413 @@ body:has(.page-panel) .site-footer {
        'initial', which resolves to black and disappears on the dark theme. */
     color: var(--text-main);
 }
+
+/* ===========================================================================
+   PODCAST
+   ---------------------------------------------------------------------------
+   The show header on /podcast.html, the episode list under it, and the player
+   card an episode page carries. All of this markup is generated - see
+   build_podcast_page(), _episode_row_html() and _player_html() in
+   build_blog.py.
+
+   Shape is taken from schlanada.kopfstim.me (Podlove Publisher): a show header
+   with cover art and subscribe buttons, an episode list keyed by a date chip,
+   and an episode page whose player is a card - cover, show name, title, one
+   big play control, and a row of secondary actions under a dotted rule.
+
+   Colour is NOT taken from there. Every value here is one of the theme's own
+   custom properties, so both light and dark mode are correct for free and the
+   podcast does not become a second visual identity inside the same site.
+   =========================================================================== */
+
+/* --- Show header ---------------------------------------------------------- */
+
+.podcast-hero {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
+    margin: 0 0 44px 0;
+    padding: 0 0 36px 0;
+    border-bottom: 1px solid var(--border);
+}
+.podcast-hero img {
+    width: 100%;
+    height: auto;
+    margin: 0;
+    border-radius: 4px;
+    /* The cover is artwork, not a photograph in the flow of an article, so it
+       keeps a hairline instead of floating on the page background - it has to
+       read as a bounded object at both themes, and dark artwork on a dark page
+       otherwise has no edge at all. */
+    border: 1px solid var(--border);
+}
+.podcast-eyebrow {
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px 0;
+}
+.podcast-hero h1 {
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 38px;
+    line-height: 1.15;
+    letter-spacing: -0.5px;
+    margin: 0 0 8px 0;
+}
+.podcast-hero .podcast-strapline {
+    font-size: 17px;
+    color: var(--text-muted);
+    margin: 0 0 18px 0;
+}
+.podcast-hero p {
+    margin: 0 0 18px 0;
+}
+
+/* Subscribe row. Every directory gets the same weight except the feed itself,
+   which is the only one of these links that does not depend on somebody else's
+   platform still existing - so it is the filled one. */
+.podcast-subscribe {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 22px 0 0 0;
+}
+.podcast-subscribe a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 16px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-main);
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.podcast-subscribe a:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--surface-hover);
+}
+.podcast-subscribe a.is-feed {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
+}
+.podcast-subscribe a.is-feed:hover {
+    background: var(--accent);
+    color: var(--accent-fg);
+    filter: brightness(1.08);
+}
+
+/* --- Episode list --------------------------------------------------------- */
+
+.episode-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.episode-row {
+    display: grid;
+    grid-template-columns: 58px 92px minmax(0, 1fr);
+    gap: 22px;
+    align-items: start;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--border);
+}
+.episode-row:last-child {
+    border-bottom: 0;
+}
+
+/* The date chip, lifted straight from the reference: day large, month small and
+   uppercase, year quietest of the three. It is a block rather than a line of
+   text because the list is scanned by date far more often than it is read. */
+.episode-date {
+    text-align: center;
+    padding: 8px 0 6px 0;
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    font-family: "Plus Jakarta Sans", sans-serif;
+    line-height: 1.1;
+}
+.episode-date .d {
+    display: block;
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+.episode-date .m {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.episode-date .y {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.75;
+}
+
+.episode-row .episode-art {
+    width: 92px;
+    height: auto;
+    margin: 0;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+}
+.episode-body h2 {
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 22px;
+    line-height: 1.25;
+    letter-spacing: -0.2px;
+    margin: 0 0 8px 0;
+}
+.episode-body h2 a {
+    color: var(--text-main);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.2s ease, color 0.2s ease;
+}
+.episode-body h2 a:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+.episode-body p {
+    margin: 0 0 10px 0;
+    font-size: 17px;
+    color: var(--text-muted);
+}
+/* Number, duration, size: the things a listener decides on before playing. Kept
+   to one quiet line so they never compete with the title. */
+.episode-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.episode-meta .sep {
+    opacity: 0.4;
+}
+
+/* --- Player card (episode page) ------------------------------------------- */
+
+.episode-player {
+    margin: 30px 0 26px 0;
+    padding: 26px 28px 20px 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+.episode-player-head {
+    display: grid;
+    grid-template-columns: 108px minmax(0, 1fr);
+    gap: 20px;
+    align-items: center;
+}
+.episode-player-head img {
+    width: 108px;
+    height: auto;
+    margin: 0;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+}
+.episode-show {
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    margin: 0 0 4px 0;
+}
+.episode-player-head .episode-name {
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--text-main);
+    margin: 0;
+}
+
+/* One big control rather than the browser's default bar. The native element is
+   kept in the markup and only visually hidden, so the page still works as an
+   audio page with the script missing - see podcast.js. */
+.episode-controls {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin: 22px 0 16px 0;
+}
+.episode-play {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+    padding: 12px 24px 12px 20px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: filter 0.2s ease;
+}
+.episode-play:hover {
+    filter: brightness(1.08);
+}
+.episode-play svg {
+    flex-shrink: 0;
+}
+/* The `hidden` attribute does NOT hide an <svg>: the UA stylesheet's
+   [hidden] { display: none } rule is scoped to the HTML namespace, so an SVG
+   carrying it renders anyway. The play/pause pair swap by that attribute, so
+   without this rule the button shows both glyphs at once. */
+.episode-play svg[hidden] {
+    display: none;
+}
+.episode-progress {
+    flex: 1 1 auto;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--surface-hover);
+    cursor: pointer;
+    /* A bare div is not a control. It carries role="slider" in the markup, and
+       needs to take focus so the arrow keys wired up in podcast.js can reach
+       it. */
+    position: relative;
+}
+.episode-progress:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+.episode-progress .bar {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: 3px;
+    background: var(--accent);
+}
+.episode-elapsed {
+    flex: 0 0 auto;
+    font-family: "Space Mono", monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Secondary actions, under the dotted rule the reference uses. Dotted rather
+   than solid on purpose: it separates without reading as the end of the card. */
+.episode-actions {
+    display: flex;
+    gap: 26px;
+    padding-top: 14px;
+    border-top: 1px dotted var(--border);
+}
+.episode-actions a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+.episode-actions a:hover {
+    color: var(--accent);
+}
+
+/* Shownotes: a chapter list is a table of contents for audio, so it is numbered
+   by timestamp rather than bulleted. */
+.episode-chapters {
+    list-style: none;
+    margin: 26px 0;
+    padding: 0;
+}
+.episode-chapters li {
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 14px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 17px;
+}
+.episode-chapters li:last-child {
+    border-bottom: 0;
+}
+.episode-chapters .t {
+    font-family: "Space Mono", monospace;
+    font-size: 13px;
+    color: var(--accent);
+    padding-top: 3px;
+}
+
+@media (max-width: 700px) {
+    .podcast-hero {
+        grid-template-columns: 140px minmax(0, 1fr);
+        gap: 20px;
+    }
+    .podcast-hero h1 { font-size: 28px; }
+    /* The thumbnail is the first thing to go: at this width the date chip still
+       earns its column, but a 92px cover repeated down the list does not. */
+    .episode-row {
+        grid-template-columns: 52px minmax(0, 1fr);
+        gap: 16px;
+    }
+    .episode-row .episode-art { display: none; }
+    .episode-player {
+        padding: 20px 18px 16px 18px;
+    }
+    .episode-player-head {
+        grid-template-columns: 76px minmax(0, 1fr);
+        gap: 14px;
+    }
+    .episode-player-head img { width: 76px; }
+    .episode-controls {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .episode-progress { order: 3; flex-basis: 100%; }
+    .episode-actions { gap: 18px; flex-wrap: wrap; }
+}
+
+@media (max-width: 520px) {
+    /* The hero stacks. Two columns survive down to about here, but below it the
+       text beside a cover is running at twenty-odd characters a line, which is
+       narrower than the episode blurbs underneath it - the header would be the
+       hardest thing on the page to read. */
+    .podcast-hero {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 18px;
+    }
+    .podcast-hero img {
+        width: 150px;
+    }
+}
+
+/* The vendored Podlove subscribe button renders itself into an iframe, so it
+   is styled from inside and all this can do is give it space. Kept beside the
+   plain pills rather than replacing them: the pills work with JavaScript off
+   and name the two directories most listeners actually use, while the button
+   is what puts a feed into an app nobody has a web link for. */
+.podcast-button {
+    margin: 18px 0 0 0;
+    min-height: 40px;
+}

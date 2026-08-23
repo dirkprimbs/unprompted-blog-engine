@@ -1,11 +1,13 @@
 import os
 import re
+import sys
 import yaml
 import markdown
 import shutil
 import json
 import html
 import hashlib
+import uuid
 import mimetypes
 import urllib.request
 from urllib.parse import urlparse
@@ -14,9 +16,12 @@ import email.utils
 
 import llm    # shared model layer: roles, call_model, generate_alt_text
 import images # build-time image optimisation (optional Pillow dependency)
+import audio  # episode length/size/MIME (optional mutagen dependency)
 from urls import (
-    SITE_URL, POSTS_DIR, TAGS_DIR, FEEDS_DIR,
+    SITE_URL, POSTS_DIR, TAGS_DIR, FEEDS_DIR, AUDIO_DIR,
+    PODCAST_FEED_NAME, PODCAST_PAGE_NAME,
     post_href, tag_page_name, tag_href, tag_feed_name, tag_feed_href, home_href,
+    audio_href, podcast_feed_href, podcast_href,
     slugify_tag, slug_for, read_slug, htaccess_content,
 )
 # Filesystem layout. Note the split: urls.py above supplies URL space (including
@@ -29,12 +34,15 @@ from config import (
     LINK_BLUESKY, BLUESKY_CREATOR, SITE_TAGLINE, NAV,
     PAGE_SIZE, FEED_ITEMS, VISIBLE_TAGS, WORDS_PER_MINUTE, TAG_EMOJI,
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
+    PODCAST, PODCAST_ENABLED,
 )
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, STATIC_SOURCE_DIRS,
     PUBLIC_DIR, PUBLIC_ASSETS_DIR,
-    CONTENT_DIR, CONTENT_ASSETS_DIR, PAGES_DIR,
+    CONTENT_DIR, CONTENT_ASSETS_DIR, CONTENT_AUDIO_DIR, PUBLIC_AUDIO_DIR,
+    PAGES_DIR,
     LINK_MANIFEST_PATH, EXISTING_TAGS_PATH, COMMENT_MODERATION_PATH,
+    REMOTE_AUDIO_LEDGER_PATH,
 )
 
 # --- GLOBAL TRACKER FOR SMART SYNCHRONIZATION ---
@@ -170,6 +178,28 @@ def _youtube_thumbnail_src(video_id):
     return rel
 
 
+def _standalone_link(line):
+    """The link target of a line that is *nothing but* a link, else None.
+
+    Accepts a bare URL on its own line or a Markdown link that is the whole
+    line. This is the engine's rule for "the author meant to embed this, not to
+    mention it": an inline link inside a sentence stays an inline link, because
+    replacing it with a player or a video would break the sentence around it.
+
+    Shared by embed_youtube() and embed_audio() so the two features can never
+    drift into disagreeing about what counts as a standalone link - which is
+    exactly the kind of difference an author would experience as the engine
+    being arbitrary.
+    """
+    stripped = line.strip()
+    md_link = re.fullmatch(r'\[[^\]]*\]\(\s*(\S+?)\s*\)', stripped)
+    if md_link:
+        return md_link.group(1)
+    if re.fullmatch(r'https?://\S+', stripped):
+        return stripped
+    return None
+
+
 def embed_youtube(markdown_text):
     def facade(video_id):
         vid = esc(video_id)
@@ -187,14 +217,7 @@ def embed_youtube(markdown_text):
 
     out_lines = []
     for line in markdown_text.split('\n'):
-        stripped = line.strip()
-        # Bare URL on its own line, or a markdown link that is the whole line.
-        md_link = re.fullmatch(r'\[[^\]]*\]\(\s*(\S+?)\s*\)', stripped)
-        candidate = None
-        if md_link:
-            candidate = md_link.group(1)
-        elif re.fullmatch(r'https?://\S+', stripped):
-            candidate = stripped
+        candidate = _standalone_link(line)
         if candidate:
             vid = _youtube_id(candidate)
             if vid:
@@ -205,6 +228,265 @@ def embed_youtube(markdown_text):
 
 
 _COMMENT_MODERATION_CACHE = None
+
+
+# --- Episode audio -----------------------------------------------------------
+
+# Byte lengths for remote enclosures, loaded once per build. See
+# REMOTE_AUDIO_LEDGER_PATH: an <enclosure> must declare a length and a file on
+# somebody else's host cannot be stat'd, so we ask once and remember.
+_REMOTE_AUDIO = None
+
+
+def _remote_audio_ledger():
+    global _REMOTE_AUDIO
+    if _REMOTE_AUDIO is None:
+        try:
+            with open(REMOTE_AUDIO_LEDGER_PATH, 'r', encoding='utf-8') as fh:
+                loaded = json.load(fh)
+            _REMOTE_AUDIO = loaded if isinstance(loaded, dict) else {}
+        except Exception:
+            _REMOTE_AUDIO = {}
+    return _REMOTE_AUDIO
+
+
+def _remote_audio_size(url):
+    """Byte length of a remote enclosure, asking the host at most once ever.
+
+    A migrated show keeps its back catalogue on its old host, so these URLs are
+    the normal case rather than an exotic one, and re-asking on every build would
+    make an offline build impossible and a fifty-episode build slow. The answer
+    is cached in content_pipeline/ beside the other ledgers.
+
+    Returns 0 when the host will not say. That is a legal enclosure length and
+    every client tolerates it - it costs a progress bar until the download
+    starts, which is a great deal better than refusing to build the feed.
+    """
+    ledger = _remote_audio_ledger()
+    if url in ledger:
+        return int(ledger[url] or 0)
+    size = 0
+    try:
+        req = urllib.request.Request(
+            url, method='HEAD', headers={'User-Agent': 'unprompted-blog/1.0'})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            size = int(resp.headers.get('Content-Length') or 0)
+    except Exception:
+        print(f"   ⚠️  Could not read the size of {url} - the feed will declare "
+              f"length 0. Set audio_bytes: in the post to fix it.")
+    ledger[url] = size
+    try:
+        os.makedirs(os.path.dirname(REMOTE_AUDIO_LEDGER_PATH), exist_ok=True)
+        with open(REMOTE_AUDIO_LEDGER_PATH, 'w', encoding='utf-8') as fh:
+            json.dump(ledger, fh, indent=2, sort_keys=True)
+    except Exception:
+        pass
+    return size
+
+
+def _player_html(episode):
+    """The episode player: cover, show name, one big play control, actions.
+
+    Progressive enhancement, which matters more here than anywhere else on the
+    site: the markup ships a real <audio controls>, and podcast.js only hides it
+    once it has successfully taken over. A page whose player fails to initialise
+    is still a page you can play the episode from - and an episode page that
+    cannot play its episode has no content at all.
+    """
+    stated = audio.format_duration(episode.get('seconds')) or ''
+    cover = (PODCAST or {}).get('cover', '')
+    cover_img = (f'<img src="{esc(cover)}" alt="{esc((PODCAST or {}).get("title", ""))}'
+                 f' cover art">' if cover else '')
+    duration_attr = f' data-duration="{esc(stated)}"' if stated else ''
+    label = esc(stated) if stated else 'Play'
+    return (
+        '<div class="episode-player">'
+        '<div class="episode-player-head">'
+        f'{cover_img}'
+        '<div>'
+        f'<p class="episode-show">{esc((PODCAST or {}).get("title", SITE_NAME))}</p>'
+        f'<p class="episode-name">{esc(episode.get("post_title", ""))}</p>'
+        '</div>'
+        '</div>'
+        f'<audio controls preload="metadata" src="{esc(episode["url"])}"></audio>'
+        '<div class="episode-controls" hidden>'
+        f'<button class="episode-play" type="button" aria-pressed="false"{duration_attr}>'
+        '<svg class="icon-play" width="16" height="16" viewBox="0 0 24 24" '
+        'fill="currentColor" aria-hidden="true"><path d="M7 4l14 8-14 8z"/></svg>'
+        '<svg class="icon-pause" width="16" height="16" viewBox="0 0 24 24" '
+        'fill="currentColor" aria-hidden="true" hidden>'
+        '<path d="M7 4h4v16H7zM14 4h4v16h-4z"/></svg>'
+        f'<span class="t">{label}</span>'
+        '</button>'
+        '<div class="episode-progress" role="slider" tabindex="0" '
+        'aria-label="Seek within the episode" aria-valuemin="0" '
+        'aria-valuemax="100" aria-valuenow="0"><span class="bar"></span></div>'
+        f'<span class="episode-elapsed">0:00{" / " + esc(stated) if stated else ""}'
+        '</span>'
+        '</div>'
+        '<div class="episode-actions">'
+        f'<a href="{esc(episode["url"])}" download>'
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round">'
+        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'
+        '</svg>Download</a>'
+        f'<a href="{esc(podcast_href())}">'
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round">'
+        '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'
+        '</svg>All episodes</a>'
+        f'<a href="{esc(podcast_feed_href())}">'
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2.5" stroke-linecap="round">'
+        '<path d="M4 11a9 9 0 0 1 9 9"></path>'
+        '<path d="M4 4a16 16 0 0 1 16 16"></path>'
+        '<circle cx="5" cy="19" r="1"></circle></svg>Subscribe</a>'
+        '</div>'
+        '</div>'
+    )
+
+
+def embed_audio(markdown_text, meta):
+    """Turn a standalone audio link into a player, and describe the episode.
+
+    The audio counterpart of embed_youtube(), using the same _standalone_link()
+    rule so the two behave identically: a link alone on its line becomes a
+    player, a link inside a sentence stays a link.
+
+    Returns (markdown, episode_or_None). The episode dict is what the feeds
+    need - url, bytes, seconds, mime - and it is put on the post's meta so
+    build_site() can tell an episode from an ordinary post without re-parsing
+    anything.
+
+    **First link wins.** A post may embed several players (an episode and its
+    trailer), but RSS allows exactly one enclosure per item, so only the first
+    becomes the episode. Choosing the first rather than the largest or the last
+    means the author decides by writing order, which is the only rule that is
+    obvious from reading the post.
+    """
+    episode = None
+    out_lines = []
+    for line in markdown_text.split('\n'):
+        src = _standalone_link(line)
+        if not src or not audio.is_audio(src):
+            out_lines.append(line)
+            continue
+
+        if _is_remote(src):
+            url = src
+            size = meta.get('audio_bytes') or _remote_audio_size(src)
+            seconds = None
+            mime = audio.mime_for(src)
+        else:
+            name = os.path.basename(src)
+            disk = os.path.join(CONTENT_AUDIO_DIR, name)
+            probed = audio.probe(disk)
+            if probed is None:
+                # Referenced but not on disk: leave the line alone rather than
+                # rendering a player for a file that would 404.
+                print(f"   ⚠️  Audio referenced but not hosted: {src}")
+                out_lines.append(line)
+                continue
+            url = audio_href(name)
+            size, seconds, mime = probed
+            if meta.get('audio_bytes'):
+                size = int(meta['audio_bytes'])
+
+        current = {
+            'url': url,
+            'bytes': int(size or 0),
+            'seconds': seconds,
+            'mime': mime,
+            'post_title': str(meta.get('title', '')),
+        }
+        if episode is None:
+            episode = current
+        out_lines.append(_player_html(current))
+
+    return '\n'.join(out_lines), episode
+
+
+# --- Episode identity --------------------------------------------------------
+
+# The fixed namespace the Podcasting 2.0 spec defines for <podcast:guid>. Not a
+# value to invent: every generator must derive a show's GUID inside this
+# namespace or two directories will disagree about which show they are holding.
+_PODCAST_NAMESPACE = uuid.UUID('ead4c236-bf58-58c6-a2c6-a6b28d128cb6')
+
+
+def show_guid():
+    """The channel-level <podcast:guid>: a UUIDv5 of the feed URL, protocol and
+    trailing slash removed, per the Podcasting 2.0 spec.
+
+    Deterministic by definition, so unlike an episode GUID this is computed on
+    every build rather than stored. It is what lets Podcast Index and the
+    directories that follow it keep tracking the show if the feed itself ever
+    moves.
+    """
+    bare = f"{SITE_URL}{podcast_feed_href()}"
+    bare = re.sub(r'^https?://', '', bare).rstrip('/')
+    return str(uuid.uuid5(_PODCAST_NAMESPACE, bare))
+
+
+def ensure_episode_guids(posts):
+    """Give every episode a permanent GUID, writing it into the post's
+    frontmatter the first time and never touching it again.
+
+    **This is the single most consequential value the engine emits.** A podcast
+    client decides "have I already got this episode?" by GUID alone. If a GUID
+    ever changes, every subscriber's app treats that episode as brand new and
+    re-downloads it, and a feed-wide change re-delivers the entire back
+    catalogue and fires a notification per episode. Apple's rule is simply that
+    it must never change, for any reason.
+
+    Which is why it cannot be derived at render time from anything visible. A
+    URL-derived GUID breaks the day a slug is tidied or the site moves domain -
+    both things this engine makes easy and neither of which feels like it should
+    have consequences. So the value is minted once and *stored*, in the same
+    content_pipeline/content/*.md the build already writes image paths and alt
+    text back into.
+
+    The minted value is a UUIDv5 of the site URL and slug, so regenerating a
+    lost file reproduces it. But once written it is read, never recomputed, and
+    never validated: an episode migrated from another host carries that host's
+    GUID verbatim - `podlove-2015-01-01t12:00:00+00:00-a1b2c3` is a perfectly
+    good GUID and rewriting it as a tidy UUID would re-deliver the archive it
+    was preserved to protect.
+    """
+    for post in posts:
+        if not post.get('episode') or str(post.get('guid') or '').strip():
+            continue
+        minted = str(uuid.uuid5(_PODCAST_NAMESPACE, f"{SITE_URL}/{post['slug']}"))
+        # meta['file'] is a bare filename - the ledger's convention - so it has
+        # to be resolved against CONTENT_DIR here.
+        filepath = os.path.join(CONTENT_DIR, str(post.get('file') or ''))
+
+        # Both failures below are fatal on purpose. An unwritten GUID still
+        # produces a valid-looking feed today, and then changes the first time
+        # the slug or the site URL does - re-delivering the whole back catalogue
+        # to every subscriber. That is invisible locally and unfixable after the
+        # fact, so it must stop the build rather than warn into a scrollback.
+        if not post.get('file') or not os.path.isfile(filepath):
+            print(f"❌ Cannot store a permanent GUID for episode "
+                  f"'{post['slug']}': its source file was not found at "
+                  f"{filepath}.")
+            sys.exit(1)
+        with open(filepath, 'r', encoding='utf-8') as fh:
+            text = fh.read()
+        match = re.match(r'^(---\s*\n)(.*?\n)(---\s*\n)(.*)', text, re.DOTALL)
+        if not match:
+            print(f"❌ Cannot store a permanent GUID for episode "
+                  f"'{post['slug']}': {post['file']} has no frontmatter block.")
+            print(f"💡 An episode needs one - see content_pipeline/TEMPLATE.md.")
+            sys.exit(1)
+        # Appended to the end of the frontmatter block rather than sorted into
+        # it: this file is the author's, and an engine that reorders their keys
+        # to insert one makes every diff unreadable.
+        text = (f"{match.group(1)}{match.group(2)}guid: \"{minted}\"\n"
+                f"{match.group(3)}{match.group(4)}")
+        write_file_if_changed(filepath, text)
+        post['guid'] = minted
+        print(f"   🔑 Minted permanent episode GUID for {post['slug']}: {minted}")
 
 
 def load_comment_moderation():
@@ -499,6 +781,95 @@ def _optimize_content_asset(disk_path):
     return new_path, f"assets/{os.path.basename(new_path)}"
 
 
+def _host_audio_links(text, filepath, filename, audio_claims):
+    """Copy any standalone local audio link into the audio directories and point
+    the Markdown at the hosted copy. Returns (text, changed).
+
+    The image equivalent of this namespaces every file as `<post>_<name>`,
+    because `screenshot.png` collides constantly. Audio deliberately does not:
+    an enclosure URL is quoted in feeds, in directories and in other people's
+    players, and it has to survive for years, so it stays exactly what the author
+    named it. Predictable audio URLs are also what let a show migrating from
+    another host redirect its back catalogue with one rewrite rule instead of a
+    table with a line per episode.
+
+    The cost of that choice is that two posts can name the same file, so a
+    collision is a hard error naming both posts rather than a silent overwrite -
+    the failure it prevents is one episode serving another's audio, which no
+    listener would report as a bug and everyone would experience as one.
+
+    Remote URLs are left completely alone. That is what lets a migrated show
+    keep serving its old episodes from wherever they already live while new ones
+    are hosted here, in one feed, with no redirects at all.
+    """
+    changed = False
+    out_lines = []
+    for line in text.split('\n'):
+        src = _standalone_link(line)
+        if not src or not audio.is_audio(src) or _is_remote(src):
+            out_lines.append(line)
+            continue
+
+        # Already hosted: nothing to copy on a rebuild, but still mirror it, so
+        # a public/ wiped between builds is repopulated and the file registers
+        # with the stale sweep instead of being deleted as unknown.
+        if src.startswith(f"{AUDIO_DIR}/"):
+            name = os.path.basename(src)
+            disk = os.path.join(CONTENT_AUDIO_DIR, name)
+            if os.path.exists(disk):
+                _claim_audio(audio_claims, name, filename, disk)
+                copy_asset_if_changed(disk, os.path.join(PUBLIC_AUDIO_DIR, name))
+            else:
+                print(f"   ⚠️  Hosted audio missing on disk ('{filename}'): {src}")
+            out_lines.append(line)
+            continue
+
+        resolved = os.path.abspath(
+            os.path.expanduser(os.path.join(os.path.dirname(filepath), src)))
+        if not os.path.exists(resolved):
+            print(f"   ⚠️  Audio not found on disk ('{filename}'): {src}")
+            out_lines.append(line)
+            continue
+
+        name = os.path.basename(resolved)
+        hosted = os.path.join(CONTENT_AUDIO_DIR, name)
+        _claim_audio(audio_claims, name, filename, hosted)
+        os.makedirs(CONTENT_AUDIO_DIR, exist_ok=True)
+        copy_asset_if_changed(resolved, hosted)
+        copy_asset_if_changed(hosted, os.path.join(PUBLIC_AUDIO_DIR, name))
+        size = os.path.getsize(hosted)
+        print(f"   🎧 Hosted episode audio: {name} ({size // 1024:,} KB)")
+
+        # Rewrite in place, keeping whatever link text the author wrote. The
+        # replacement is still a standalone link, so the next build recognises it
+        # through the same code path rather than needing a second syntax.
+        label = re.match(r'\s*\[([^\]]*)\]', line.strip())
+        label = label.group(1) if label else 'Listen'
+        out_lines.append(f"[{label}]({AUDIO_DIR}/{name})")
+        changed = True
+
+    return '\n'.join(out_lines), changed
+
+
+def _claim_audio(audio_claims, name, filename, disk_path):
+    """Record which post owns a hosted audio filename; fail loudly on a clash.
+
+    Two posts referencing the *same* file on disk is fine and common - a trailer
+    and the episode it trails, say. Two different files with one basename is not,
+    because the second copy would overwrite the first and one episode's feed
+    entry would quietly start serving the other's audio.
+    """
+    previous = audio_claims.get(name)
+    if previous and previous[0] != filename and previous[1] != disk_path:
+        print(f"❌ Two posts claim the audio filename '{name}':")
+        print(f"   {previous[0]}")
+        print(f"   {filename}")
+        print(f"💡 Episode filenames become public URLs and are not namespaced "
+              f"per post. Rename one of the files.")
+        sys.exit(1)
+    audio_claims.setdefault(name, (filename, disk_path))
+
+
 def process_content_media():
     if not os.path.exists(CONTENT_DIR):
         return
@@ -511,6 +882,16 @@ def process_content_media():
     if not can_caption:
         print("   ⚠️  Alt-text generation skipped (IMAGE role needs "
               "OPENROUTER_API_KEY). Images are still copied and referenced.")
+    if PODCAST_ENABLED and not audio.AVAILABLE:
+        print("   ⚠️  Episode durations unavailable (needs mutagen: "
+              "pip install -r requirements.txt). The feed omits "
+              "<itunes:duration>; everything else is unaffected.")
+
+    # Which post claimed which hosted audio filename. Audio keeps the author's
+    # own filename rather than being namespaced per post (see _host_audio_links),
+    # so this is what turns a collision into an error instead of one episode
+    # silently overwriting another's file.
+    audio_claims = {}
 
     for filename in sorted(os.listdir(CONTENT_DIR)):
         if not filename.endswith('.md') or filename in ('index.md', 'changelog.md'):
@@ -589,7 +970,10 @@ def process_content_media():
             if new_alt != alt or new_src != src:
                 replacements.append((m.group(0), f"![{new_alt}]({new_src}{title})"))
 
-        if replacements:
+        text, audio_replaced = _host_audio_links(text, filepath, filename,
+                                                 audio_claims)
+
+        if replacements or audio_replaced:
             for old, new in replacements:
                 text = text.replace(old, new, 1)
             write_file_if_changed(filepath, text)
@@ -657,6 +1041,12 @@ def parse_markdown_file(filepath, valid_slugs=None):
 
     # Turn standalone YouTube links into click-to-play facades before conversion.
     markdown_text = embed_youtube(markdown_text)
+
+    # Then standalone audio links into players. Runs after the reading-time
+    # estimate above, which should count the shownotes rather than the markup
+    # that replaces the link.
+    markdown_text, episode = embed_audio(markdown_text, frontmatter)
+    frontmatter['episode'] = episode
 
     html_content = markdown.markdown(markdown_text, extensions=['extra', 'codehilite'])
     html_content = _absolutize_body(html_content, valid_slugs or set())
@@ -800,6 +1190,166 @@ def generate_post_feed_html(posts_list, title_text, current_page=1, total_pages=
         
     return f"<h1>{title_text}</h1>" + feed_body + pagination_html
 
+def _podlove_button_html():
+    """The vendored Podlove subscribe button, configured inline.
+
+    Config goes in a global rather than through the widget's `data-json-url`
+    option on purpose: a failed JSON fetch there is swallowed with a
+    console.debug and no button appears, which is exactly the kind of failure
+    nobody notices on their own site. Inline, the config either renders with the
+    page or does not exist.
+
+    The `javascripts/` segment in the src is load-bearing - the widget derives
+    the location of its stylesheet, its iframe and its ninety-odd app logos by
+    stripping that segment off its own src. Move the file and everything else
+    404s. See engine/fetch_podlove.py.
+    """
+    if not PODCAST_ENABLED:
+        return ''
+    cfg = PODCAST
+    cover = cfg['cover']
+    data = {
+        'title': cfg['title'],
+        'subtitle': cfg['subtitle'],
+        'description': cfg['description'],
+        'cover': SITE_URL + cover if cover.startswith('/') else cover,
+        'feeds': [{
+            'type': 'audio',
+            'format': 'mp3',
+            'url': f"{SITE_URL}{podcast_feed_href()}",
+            'variant': 'high',
+        }],
+    }
+    if cfg['links'].get('apple'):
+        data['feeds'][0]['directory-url-itunes'] = cfg['links']['apple']
+    payload = json.dumps(data, ensure_ascii=False)
+    # </script> inside a JSON string would close this block early; the escape is
+    # invisible to JSON.parse.
+    payload = payload.replace('</', '<\\/')
+    return (
+        f'<script>window.podcastData = {payload};</script>'
+        f'<script class="podlove-subscribe-button" '
+        f'src="/subscribe-button/javascripts/app.js" '
+        f'data-json-data="podcastData" data-language="{esc(PODCAST["language"][:2])}" '
+        f'data-size="big" data-style="filled" data-format="rectangle" '
+        f'data-color="{esc(cfg["button_color"])}"></script>'
+        f'<noscript><a href="{esc(podcast_feed_href())}">Subscribe to the feed</a>'
+        f'</noscript>'
+    )
+
+
+def _format_bytes(size):
+    """A file size a listener can act on: MB for an episode, KB for a clip.
+
+    Integer megabytes alone would print '0 MB' for anything under one, which is
+    what a trailer or a short bonus track looks like - and a download size of
+    zero reads as an error rather than as 'small'.
+    """
+    if size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.0f} MB"
+    return f"{max(1, size // 1024)} KB"
+
+
+def _episode_row_html(post):
+    """One episode in the list on /podcast.html: date chip, cover, title,
+    summary, and the facts a listener decides on before playing."""
+    episode = post['episode']
+    raw = str(post.get('date', ''))
+    try:
+        dt = datetime.strptime(raw[:10], "%Y-%m-%d")
+        day, month, year = dt.strftime("%d"), dt.strftime("%b"), dt.strftime("%Y")
+    except ValueError:
+        day, month, year = '', raw, ''
+
+    cover = (PODCAST or {}).get('cover', '')
+    art = (f'<img class="episode-art" src="{esc(cover)}" alt="">' if cover else '')
+
+    facts = []
+    if post.get('episode_number') or post.get('episode_no'):
+        facts.append(f"Episode {esc(post.get('episode_number') or post.get('episode_no'))}")
+    duration = audio.format_duration(episode.get('seconds'))
+    if duration:
+        facts.append(esc(duration))
+    if episode.get('bytes'):
+        facts.append(_format_bytes(episode['bytes']))
+    meta_line = '<span class="sep">|</span>'.join(f'<span>{f}</span>' for f in facts)
+
+    return (
+        '<article class="episode-row">'
+        f'<div class="episode-date"><span class="d">{day}</span>'
+        f'<span class="m">{esc(month)}</span><span class="y">{year}</span></div>'
+        f'{art}'
+        '<div class="episode-body">'
+        f'<h2><a href="{esc(post_href(post["slug"]))}">{esc(post["title"])}</a></h2>'
+        f'<p>{esc(post.get("summary", ""))}</p>'
+        f'<div class="episode-meta">{meta_line}</div>'
+        '</div>'
+        '</article>'
+    )
+
+
+def build_podcast_page(base_template, episodes, sitemap_urls):
+    """Write public/podcast.html: the show header, the subscribe options, and
+    every episode.
+
+    Called before render_standalone_pages() so that a hand-written
+    content_pipeline/pages/podcast.md overrides this one - the same precedence
+    that already lets pages/index.md replace the generated homepage. A show with
+    a real about-page to write should not have to fight the generator for its
+    own URL.
+    """
+    if not PODCAST_ENABLED:
+        return
+    cfg = PODCAST
+    pills = ''.join(
+        f'<a href="{esc(url)}">{esc(name.replace("_", " ").title())}</a>'
+        for name, url in cfg['links'].items()
+    )
+    rows = "".join(_episode_row_html(p) for p in episodes)
+    empty = ('<p>No episodes yet. Link an audio file from a post and it '
+             'appears here.</p>')
+    cover = cfg['cover']
+
+    main = (
+        '<div class="article-content page-content">'
+        '<section class="podcast-hero">'
+        f'<img src="{esc(cover)}" alt="{esc(cfg["title"])} cover art">'
+        '<div>'
+        '<p class="podcast-eyebrow">Podcast</p>'
+        f'<h1>{esc(cfg["title"])}</h1>'
+        + (f'<p class="podcast-strapline">{esc(cfg["subtitle"])}</p>'
+           if cfg['subtitle'] else '')
+        + f'<p>{esc(cfg["description"])}</p>'
+        '<div class="podcast-subscribe">'
+        f'<a class="is-feed" href="{esc(podcast_feed_href())}">RSS feed</a>'
+        f'{pills}'
+        '</div>'
+        f'<div class="podcast-button">{_podlove_button_html()}</div>'
+        '</div>'
+        '</section>'
+        f'<div class="episode-list">{rows or empty}</div>'
+        '</div>'
+    )
+
+    alt_feed = (f'<link rel="alternate" type="application/rss+xml" '
+                f'title="{esc(cfg["title"])} podcast feed" '
+                f'href="{SITE_URL}{podcast_feed_href()}" />')
+    page = safe_render(base_template, {
+        "%PAGE_TITLE%": f"{esc(cfg['title'])} — {esc(SITE_NAME)}",
+        "%META_DESCRIPTION%": esc(cfg['description'])[:300],
+        "%OG_TYPE%": "website",
+        "%PAGE_SLUG%": PODCAST_PAGE_NAME,
+        "%ALT_FEED_LINK%": alt_feed,
+        "%STRUCTURED_DATA%": "",
+        "%PODCAST_SCRIPT%": (
+            f'<script src="/podcast.js?v={_asset_version()}" defer></script>'
+        ),
+        "%MAIN_CONTENT%": main,
+    })
+    write_file_if_changed(os.path.join(PUBLIC_DIR, PODCAST_PAGE_NAME), page)
+    sitemap_urls.append(f"{SITE_URL}{podcast_href()}")
+
+
 def render_standalone_pages(base_template, sitemap_urls):
     """Render content_pipeline/pages/*.md to /<name>.html at the site root.
 
@@ -875,7 +1425,7 @@ def render_standalone_pages(base_template, sitemap_urls):
 # Theme files the template links by name. Their URLs carry a version query so
 # they can be cached for a year and still update the moment they change.
 _VERSIONED_ASSETS = ('style.css', 'fonts.css', 'search.js', 'comments.js',
-                     'dompurify.min.js')
+                     'podcast.js', 'dompurify.min.js')
 
 _ASSET_VERSION = None
 
@@ -1038,6 +1588,9 @@ def safe_render(template, mappings):
     # thread, so it defaults to nothing (same shape as %OG_IMAGE_TAGS% below).
     if "%COMMENTS_SCRIPT%" not in mappings:
         mappings["%COMMENTS_SCRIPT%"] = ""
+    # Same bargain for the episode player: only a page with one fetches it.
+    if "%PODCAST_SCRIPT%" not in mappings:
+        mappings["%PODCAST_SCRIPT%"] = ""
     # Only posts with an image of their own emit og:image/twitter:image tags.
     # Everything else (homepage, tag pages, and imageless posts) omits them.
     if "%OG_IMAGE_TAGS%" not in mappings:
@@ -1061,6 +1614,95 @@ def safe_render(template, mappings):
 
     return output
 
+_PLAYER_OPEN = '<div class="episode-player">'
+_DIV_TAG_RE = re.compile(r'<(/?)div\b', re.IGNORECASE)
+
+
+def strip_player(html_body):
+    """Remove the on-page episode player from a body bound for a feed.
+
+    A podcast client has its own player and gets the audio from the
+    <enclosure>; shipping ours inside the shownotes gives the listener a second,
+    dead set of controls and drops the player's chrome ("Download", "All
+    episodes", the duration) into <itunes:summary>, where it reads as part of
+    the episode description.
+
+    It also takes the player's root-relative URLs out of the feed. Only
+    /assets/ and /posts/*.html are promoted to absolute for feed readers, so the
+    player's /audio/ and cover links would arrive relative and resolve against
+    whatever host the reader is on.
+
+    Matched by counting <div> depth rather than with a regex. The player nests
+    several levels, and a non-greedy pattern stops at the first </div> it meets:
+    that removes the opening tag - and with it the class name that would have
+    shown you the block was still there - while leaving most of the player in
+    the feed.
+    """
+    while True:
+        start = html_body.find(_PLAYER_OPEN)
+        if start == -1:
+            return html_body
+        depth = 0
+        end = None
+        for match in _DIV_TAG_RE.finditer(html_body, start):
+            depth += -1 if match.group(1) else 1
+            if depth == 0:
+                end = html_body.find('>', match.end()) + 1
+                break
+        if end is None:            # unbalanced markup: leave it alone rather
+            return html_body       # than truncate the rest of the post
+        html_body = html_body[:start] + html_body[end:]
+
+
+def _cdata(text):
+    """Wrap text in CDATA, splitting any literal ']]>' that would end it early.
+
+    A post that quotes ']]>' - talking about XML, or about this very problem -
+    would otherwise terminate the section mid-body and produce a feed no reader
+    can parse. The standard fix is to break the sequence across two CDATA
+    sections; the bytes a parser sees are identical.
+    """
+    return f"<![CDATA[{str(text).replace(']]>', ']]]]><![CDATA[>')}]]>"
+
+
+def item_pubdate(post):
+    """RFC-2822 publication date for a feed item.
+
+    `published:` wins over `date:` when present, because `date:` is
+    day-precision and two episodes released on one day would otherwise tie and
+    be ordered arbitrarily. That matters for an imported archive, where the feed
+    being replaced had real timestamps and subscribers would see the order
+    change.
+    """
+    raw = post.get('published') or post.get('date')
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            dt = datetime.strptime(str(raw).replace('Z', '').strip()[:19], fmt)
+            return email.utils.formatdate(dt.timestamp(), usegmt=True)
+        except (ValueError, TypeError):
+            continue
+    if isinstance(raw, datetime):
+        return email.utils.formatdate(raw.timestamp(), usegmt=True)
+    return email.utils.formatdate(usegmt=True)
+
+
+def _episode_xml(post):
+    """The <enclosure> and iTunes item tags, or '' for a post that is not an
+    episode. Shared by both feeds - the main feed carries the enclosure too, so
+    an ordinary RSS reader can play an episode without subscribing twice."""
+    episode = post.get('episode')
+    if not episode or post.get('podcast') is False:
+        return ''
+    parts = [
+        f'<enclosure url="{html.escape(SITE_URL + episode["url"] if episode["url"].startswith("/") else episode["url"], quote=True)}" '
+        f'length="{episode["bytes"]}" type="{episode["mime"]}" />'
+    ]
+    duration = audio.format_duration(episode.get('seconds'))
+    if duration:
+        parts.append(f'<itunes:duration>{duration}</itunes:duration>')
+    return "\n            " + "\n            ".join(parts)
+
+
 def rss_item_xml(post):
     title_escaped = html.escape(post['title'], quote=True)
     summary_escaped = html.escape(post.get('summary', ''), quote=True)
@@ -1068,29 +1710,23 @@ def rss_item_xml(post):
     # Grab the HTML body and promote its already root-absolute asset/link URLs
     # (e.g. /assets/x.png, /posts/y.html - see _absolutize_body) to fully
     # qualified ones so images and internal navigation work inside a feed reader.
-    body_content = post.get('html_body', '')
+    body_content = strip_player(post.get('html_body', ''))
     body_content = re.sub(r'src="/assets/', f'src="{SITE_URL}/assets/', body_content)
     body_content = re.sub(r'href="(/[^"]+\.html)"', f'href="{SITE_URL}\\1"', body_content)
-
-    try:
-        dt = datetime.strptime(str(post['date']), "%Y-%m-%d")
-        rss_date = email.utils.formatdate(dt.timestamp(), usegmt=True)
-    except (ValueError, TypeError):
-        rss_date = email.utils.formatdate(usegmt=True)
 
     return f"""        <item>
             <title>{title_escaped}</title>
             <link>{SITE_URL}{post_href(post['slug'])}</link>
             <guid isPermaLink="true">{SITE_URL}{post_href(post['slug'])}</guid>
             <description>{summary_escaped}</description>
-            <content:encoded><![CDATA[{body_content}]]></content:encoded>
-            <pubDate>{rss_date}</pubDate>
+            <content:encoded>{_cdata(body_content)}</content:encoded>
+            <pubDate>{item_pubdate(post)}</pubDate>{_episode_xml(post)}
         </item>"""
 
 def rss_feed_xml(posts_list, feed_title, feed_desc, self_path, last_build_date_rfc):
     channels = "\n".join(rss_item_xml(p) for p in posts_list)
     return f"""<?xml version="1.0" encoding="UTF-8" ?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
 <channel>
     <title>{html.escape(feed_title, quote=True)}</title>
     <link>{SITE_URL}/index.html</link>
@@ -1101,6 +1737,132 @@ def rss_feed_xml(posts_list, feed_title, feed_desc, self_path, last_build_date_r
 {channels}
 </channel>
 </rss>"""
+
+def podcast_item_xml(post):
+    """One <item> in the podcast feed.
+
+    Deliberately not rss_item_xml() with extra tags: the two feeds want
+    different things from the same post. The blog feed's guid is the post URL,
+    which is right for a reader that dedupes by link; this one's guid is the
+    stored permanent identifier, which is the only thing standing between a slug
+    edit and every subscriber re-downloading the archive.
+    """
+    episode = post['episode']
+    title = html.escape(post['title'], quote=True)
+    summary = html.escape(post.get('summary', ''), quote=True)
+
+    body = strip_player(post.get('html_body', ''))
+    body = re.sub(r'src="/assets/', f'src="{SITE_URL}/assets/', body)
+    body = re.sub(r'href="(/[^"]+\.html)"', f'href="{SITE_URL}\\1"', body)
+
+    # itunes:summary must be plain text - Apple strips or rejects markup there,
+    # even though <description> accepts it. 4000 characters is Apple's cap.
+    plain = plain_text(body)[:4000]
+
+    optional = []
+    duration = audio.format_duration(episode.get('seconds'))
+    if duration:
+        optional.append(f'<itunes:duration>{duration}</itunes:duration>')
+    if post.get('episode_number') or post.get('episode_no'):
+        optional.append(f'<itunes:episode>'
+                        f'{int(post.get("episode_number") or post.get("episode_no"))}'
+                        f'</itunes:episode>')
+    if post.get('season'):
+        optional.append(f'<itunes:season>{int(post["season"])}</itunes:season>')
+    episode_type = str(post.get('episode_type', 'full')).strip().lower()
+    if episode_type in ('full', 'trailer', 'bonus'):
+        optional.append(f'<itunes:episodeType>{episode_type}</itunes:episodeType>')
+    explicit = post.get('explicit')
+    explicit = PODCAST['explicit'] if explicit is None else bool(explicit)
+    optional.append(f'<itunes:explicit>{str(explicit).lower()}</itunes:explicit>')
+
+    url = SITE_URL + episode['url'] if episode['url'].startswith('/') else episode['url']
+    extras = "\n            ".join(optional)
+    return f"""        <item>
+            <title>{title}</title>
+            <link>{SITE_URL}{post_href(post['slug'])}</link>
+            <guid isPermaLink="false">{html.escape(str(post['guid']), quote=True)}</guid>
+            <pubDate>{item_pubdate(post)}</pubDate>
+            <description>{summary}</description>
+            <itunes:summary>{html.escape(plain, quote=True)}</itunes:summary>
+            <content:encoded>{_cdata(body)}</content:encoded>
+            <enclosure url="{html.escape(url, quote=True)}" length="{episode['bytes']}" type="{episode['mime']}" />
+            {extras}
+        </item>"""
+
+
+def podcast_feed_xml(episodes, last_build_date_rfc):
+    """The iTunes/Podcasting 2.0 feed.
+
+    A sibling of rss_feed_xml() rather than a parameterisation of it, because
+    almost every channel element differs: the language and the <link> come from
+    the podcast config instead of being hard-coded, and the whole iTunes block
+    has no counterpart in a blog feed.
+
+    Everything Apple requires is emitted unconditionally, since a feed missing
+    one of them is rejected at submission with a message that names the tag but
+    not the reason. The conditional tags below it are the ones that are wrong to
+    guess at.
+    """
+    cfg = PODCAST
+    cover = cfg['cover']
+    cover_url = SITE_URL + cover if cover.startswith('/') else cover
+    esc_attr = lambda v: html.escape(str(v), quote=True)
+
+    optional = []
+    if cfg['subtitle']:
+        optional.append(f"    <itunes:subtitle>{esc_attr(cfg['subtitle'])}</itunes:subtitle>")
+    if cfg['copyright']:
+        optional.append(f"    <copyright>{esc_attr(cfg['copyright'])}</copyright>")
+    # <podcast:locked> tells hosting platforms whether this feed may be imported
+    # and the show claimed elsewhere. Default yes; the owner email is the proof.
+    optional.append(
+        f"    <podcast:locked owner=\"{esc_attr(cfg['owner_email'])}\">"
+        f"{'yes' if cfg['locked'] else 'no'}</podcast:locked>")
+    if cfg['new_feed_url']:
+        # Only ever set while genuinely moving: every subscribed app follows it
+        # permanently, so a stray value silently hands your audience away.
+        optional.append(f"    <itunes:new-feed-url>{esc_attr(cfg['new_feed_url'])}"
+                        f"</itunes:new-feed-url>")
+
+    category = f'    <itunes:category text="{esc_attr(cfg["category"])}">'
+    if cfg['subcategory']:
+        category += (f'\n        <itunes:category text="{esc_attr(cfg["subcategory"])}" />'
+                     f'\n    </itunes:category>')
+    else:
+        category = f'    <itunes:category text="{esc_attr(cfg["category"])}" />'
+
+    items = "\n".join(podcast_item_xml(p) for p in episodes)
+    extras = "\n".join(optional)
+    return f"""<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+     xmlns:podcast="https://podcastindex.org/namespace/1.0">
+<channel>
+    <title>{esc_attr(cfg['title'])}</title>
+    <link>{SITE_URL}{podcast_href()}</link>
+    <description>{esc_attr(cfg['description'])}</description>
+    <language>{esc_attr(cfg['language'])}</language>
+    <lastBuildDate>{last_build_date_rfc}</lastBuildDate>
+    <generator>Unprompted Blog Engine</generator>
+    <atom:link href="{SITE_URL}{podcast_feed_href()}" rel="self" type="application/rss+xml" />
+    <podcast:guid>{show_guid()}</podcast:guid>
+    <itunes:image href="{esc_attr(cover_url)}" />
+{category}
+    <itunes:explicit>{str(cfg['explicit']).lower()}</itunes:explicit>
+    <itunes:author>{esc_attr(cfg['author'])}</itunes:author>
+    <itunes:type>{cfg['type']}</itunes:type>
+    <itunes:owner>
+        <itunes:name>{esc_attr(cfg['owner_name'])}</itunes:name>
+        <itunes:email>{esc_attr(cfg['owner_email'])}</itunes:email>
+    </itunes:owner>
+{extras}
+{items}
+</channel>
+</rss>"""
+
 
 def feed_build_date(posts_list):
     if posts_list:
@@ -1270,6 +2032,19 @@ def build_site():
                 f'<script src="/comments.js?v={_asset_version()}" defer></script>'
                 if comments_html else ''
             ),
+            "%PODCAST_SCRIPT%": (
+                f'<script src="/podcast.js?v={_asset_version()}" defer></script>'
+                if meta.get('episode') else ''
+            ),
+            # An episode page advertises the podcast feed as well as the blog's,
+            # so a browser's feed discovery - and anything scraping for one -
+            # finds the subscribable version rather than only the reading one.
+            "%ALT_FEED_LINK%": (
+                f'<link rel="alternate" type="application/rss+xml" '
+                f'title="{esc(PODCAST["title"])} podcast feed" '
+                f'href="{SITE_URL}{podcast_feed_href()}" />'
+                if meta.get('episode') and PODCAST_ENABLED else ''
+            ),
             "%MAIN_CONTENT%": article_html
         })
 
@@ -1406,7 +2181,19 @@ def build_site():
             # FIXED: Utilizing smart compilation writer
             write_file_if_changed(os.path.join(PUBLIC_DIR, TAGS_DIR, tag_file_name), tag_html)
             
+    # --- PODCAST ---
+    # Episodes are ordinary posts that happen to carry audio; `podcast: false`
+    # opts a post out of the show while keeping its player. GUIDs are minted
+    # before anything is written, because both feeds depend on them.
+    episodes = [p for p in posts
+                if p.get('episode') and p.get('podcast') is not False]
+    if PODCAST_ENABLED and episodes:
+        ensure_episode_guids(episodes)
+    build_podcast_page(base_template, episodes, sitemap_urls)
+
     # --- AUTOMATED SITEMAP OUT ---
+    # Runs after build_podcast_page so a hand-written pages/podcast.md wins,
+    # exactly as pages/index.md wins over the generated homepage.
     render_standalone_pages(base_template, sitemap_urls)
 
     sitemap_entries = "".join([f"<url><loc>{url}</loc></url>" for url in sitemap_urls])
@@ -1426,6 +2213,16 @@ def build_site():
     )
     # FIXED: Utilizing smart compilation writer
     write_file_if_changed(os.path.join(PUBLIC_DIR, "feed.xml"), rss_full_xml)
+
+    # Podcast feed: every episode, never capped at FEED_ITEMS. A blog feed is a
+    # what's-new list, but a podcast feed is the show's whole catalogue - an
+    # episode that falls out of it disappears from every directory and from the
+    # back catalogue of every app.
+    if PODCAST_ENABLED and episodes:
+        write_file_if_changed(
+            os.path.join(PUBLIC_DIR, PODCAST_FEED_NAME),
+            podcast_feed_xml(episodes, feed_build_date(episodes)),
+        )
 
     # Per-tag feeds: one feed.xml per topic, so a reader can subscribe to just
     # the subjects they care about. Same 15-item cap and full-content format as

@@ -144,6 +144,54 @@ No model ever touches a file written this way (bar the best-effort image caption
 
 Two things worth knowing about them. A page named `index.md` claims `/` and replaces the post feed there, which is how you run a site whose front page is a landing page rather than a river of posts. And adding `layout: panel` to a page's frontmatter sets its title in a narrow left-hand column with the body beside it, in a sans face on a wider measure - signage rather than an article. Both are opt-in; a page without them renders exactly as before.
 
+## Publishing a podcast
+
+Link an audio file from a post and it becomes an episode. That is the whole
+mechanism - there is no separate episode type, no second pipeline, and nothing
+to remember beyond writing the link on a line of its own:
+
+```markdown
+[Listen to this episode](~/Recordings/2026-08-14-signal.mp3)
+```
+
+On the next build the file is copied into `public/audio/`, the link becomes a
+player, and the episode joins a second feed at `/podcast.xml` alongside the
+normal one. A link *inside a sentence* stays a plain link - the same rule
+YouTube links already follow.
+
+Turn it on by adding a `podcast:` section to `site.yaml` (see
+`site.example.yaml`, which documents every key). Without one the engine
+publishes text exactly as before. The section is validated strictly, on purpose:
+a blog with a bad setting renders wrong and you notice, while a podcast with a
+bad setting builds a feed that looks fine and is rejected by Apple days later.
+
+You get `/podcast.html` with the show header, the subscribe button and every
+episode; a player on each episode page; and `<enclosure>` tags in the main
+`feed.xml` too, so people already subscribed to your writing can play episodes
+without subscribing twice. Writing your own `content_pipeline/pages/podcast.md`
+overrides the generated page.
+
+**Episode GUIDs.** The first build that turns a post into an episode writes a
+`guid:` into its frontmatter and never changes it again. Leave it there. It is
+how every podcast app decides whether it has already seen an episode, so if it
+changed, every subscriber would re-download your whole back catalogue - which is
+also why the engine stores it rather than deriving it from the URL, and why you
+can paste in a GUID from a show you are migrating and have it used verbatim.
+
+**Optional bits.** `podcast: false` in a post's frontmatter keeps the player but
+leaves the show. `episode_number:`, `season:`, `episode_type:` (`full`,
+`trailer`, `bonus`) and `explicit:` feed the matching iTunes tags. `published:`
+takes a full timestamp where `date:` is day-precision, which matters when two
+episodes share a day.
+
+Episode durations need `mutagen` (`pip install -r requirements.txt`). Without
+it everything still builds and the feed simply omits `<itunes:duration>`.
+
+The subscribe button is Podlove's, vendored into the theme by
+`python3 engine/fetch_podlove.py` so no reader's browser contacts podlove.org.
+It is what turns a feed URL into one tap in whichever podcast app someone
+actually uses.
+
 ## Interacting with the system
 
 Everything runs through `publish.sh`. The three stages - ingest, build, deploy - each run on their own so you can stop and check between them:

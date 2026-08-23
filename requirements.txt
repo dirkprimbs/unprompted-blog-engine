@@ -3,3 +3,7 @@ PyYAML>=6.0,<7.0
 # Optional: build-time image optimisation (engine/images.py). Without it the
 # build still runs and hosts images exactly as exported, printing one warning.
 Pillow>=10.0
+
+# Optional: episode duration for the podcast feed (engine/audio.py). Without it
+# the feed omits <itunes:duration> and nothing else changes.
+mutagen>=1.45
