@@ -257,6 +257,15 @@ compile_site() {
     if [ -d "engine/templates/static" ]; then
         echo "📁 Injecting engine theme assets..."
         cp -R --preserve=timestamps engine/templates/static/. public/
+        # The vendored subscribe button and the episode player are theme files,
+        # but only a podcast links them - and the button alone is 1.5 MB across
+        # 106 files. A site with no podcast: section would otherwise upload all
+        # of it, forever, to serve nothing. build_blog.py's sweep leaves the
+        # same files out of its whitelist, so a site that used to have them
+        # loses them on the next build rather than keeping them for good.
+        if ! python3 -c "import sys; sys.path.insert(0, 'engine'); import config; sys.exit(0 if config.PODCAST_ENABLED else 1)" >/dev/null 2>&1; then
+            rm -rf public/subscribe-button public/podcast.js
+        fi
     fi
     if [ -d "public_static" ]; then
         echo "📁 Injecting site static assets..."

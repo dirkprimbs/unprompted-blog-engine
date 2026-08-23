@@ -39,6 +39,7 @@ from config import (
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, STATIC_SOURCE_DIRS,
     PUBLIC_DIR, PUBLIC_ASSETS_DIR,
+    PODCAST_ONLY_ASSETS,
     CONTENT_DIR, CONTENT_ASSETS_DIR, CONTENT_AUDIO_DIR, PUBLIC_AUDIO_DIR,
     PAGES_DIR,
     LINK_MANIFEST_PATH, EXISTING_TAGS_PATH, COMMENT_MODERATION_PATH,
@@ -2461,6 +2462,13 @@ def build_site():
         for root, _, files in os.walk(static_dir):
             for file in files:
                 rel_path = os.path.relpath(os.path.join(root, file), static_dir)
+                # A site with no podcast never links the podcast theme files, so
+                # they are not whitelisted here and the sweep below removes any
+                # an earlier build left in public/. publish.sh stops copying them
+                # in for the same site; the two have to agree or the sweep would
+                # delete them on every build and the copy restore them, silently.
+                if not PODCAST_ENABLED and rel_path.split(os.sep)[0] in PODCAST_ONLY_ASSETS:
+                    continue
                 static_targets.add(os.path.abspath(os.path.join(PUBLIC_DIR, rel_path)))
 
     # Sweep and destroy obsolete files in public/

@@ -65,6 +65,14 @@ SITE_STATIC_DIR = os.path.join(REPO_ROOT, "public_static")
 # mtimes intact and the FTP mirror never notices.
 STATIC_SOURCE_DIRS = (THEME_STATIC_DIR, SITE_STATIC_DIR)
 
+# Theme files only a podcast uses. They are part of the theme - they belong in
+# the repo and every clone gets them - but a site with no podcast: section never
+# links them, and the vendored subscribe button alone is 1.5 MB across 106
+# files. publish.sh skips copying these into public/ for such a site, and
+# build_blog.py leaves them out of the sweep's whitelist so an earlier build's
+# copies are cleaned up rather than sitting there being uploaded forever.
+PODCAST_ONLY_ASSETS = ("subscribe-button", "podcast.js")
+
 # --- Compiled output ---
 PUBLIC_DIR = os.path.join(REPO_ROOT, "public")
 PUBLIC_ASSETS_DIR = os.path.join(PUBLIC_DIR, "assets")
