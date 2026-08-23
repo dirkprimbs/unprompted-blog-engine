@@ -1188,6 +1188,25 @@ def _absolutize_body(html_body, valid_slugs):
     # paths are skipped; only bare relative '*.html' hrefs are considered.
     return re.sub(r'href="([^":/][^"]*\.html)"', _fix_link, html_body)
 
+def pager_html(current_page, total_pages, page_href):
+    """The Newer/Older pager. Shared by the post list and the episode list so
+    the two can never drift into looking like different sites."""
+    if total_pages <= 1:
+        return ""
+    prev_link = ('<span class="disabled">← Newer</span>' if current_page <= 1
+                 else f'<a href="{page_href(current_page - 1)}">← Newer</a>')
+    next_link = ('<span class="disabled">Older →</span>'
+                 if current_page >= total_pages
+                 else f'<a href="{page_href(current_page + 1)}">Older →</a>')
+    return f"""
+        <div class="pagination">
+            {prev_link}
+            <span class="page-info">Page {current_page} of {total_pages}</span>
+            {next_link}
+        </div>
+        """
+
+
 def generate_post_feed_html(posts_list, title_text, current_page=1, total_pages=1, page_href=home_href):
     cards = []
     for post in posts_list:
@@ -1206,26 +1225,8 @@ def generate_post_feed_html(posts_list, title_text, current_page=1, total_pages=
 
     feed_body = "".join(cards) if cards else "<p>No stories found.</p>"
 
-    pagination_html = ""
-    if total_pages > 1:
-        prev_link = '<span class="disabled">← Newer</span>'
-        next_link = '<span class="disabled">Older →</span>'
-
-        if current_page > 1:
-            prev_link = f'<a href="{page_href(current_page-1)}">← Newer</a>'
-
-        if current_page < total_pages:
-            next_link = f'<a href="{page_href(current_page+1)}">Older →</a>'
-
-        pagination_html = f"""
-        <div class="pagination">
-            {prev_link}
-            <span class="page-info">Page {current_page} of {total_pages}</span>
-            {next_link}
-        </div>
-        """
-        
-    return f"<h1>{title_text}</h1>" + feed_body + pagination_html
+    return (f"<h1>{title_text}</h1>" + feed_body
+            + pager_html(current_page, total_pages, page_href))
 
 # One id for the header's subscribe trigger. Fixed rather than random so the
 # markup is identical on every page and byte-for-byte stable between builds -
@@ -1413,13 +1414,18 @@ def build_podcast_page(base_template, episodes, sitemap_urls):
         f'<a href="{esc(url)}">{esc(name.replace("_", " ").title())}</a>'
         for name, url in cfg['links'].items()
     )
-    rows = "".join(_episode_row_html(p) for p in episodes)
     empty = ('<p>No episodes yet. Link an audio file from a post and it '
              'appears here.</p>')
     cover = cfg['cover']
 
-    main = (
-        '<div class="article-content page-content">'
+    # Paginated like every other list on the site. A show with three hundred
+    # episodes would otherwise ship all three hundred rows - and their cover
+    # thumbnails - to anyone who opens the front page.
+    at_home = podcast_is_home()
+    page_href = home_href if at_home else podcast_href
+    total_pages = max(1, (len(episodes) + PAGE_SIZE - 1) // PAGE_SIZE)
+
+    hero = (
         '<section class="podcast-hero">'
         f'<img src="{esc(cover)}" alt="{esc(cfg["title"])} cover art">'
         '<div>'
@@ -1435,33 +1441,54 @@ def build_podcast_page(base_template, episodes, sitemap_urls):
         f'<div class="podcast-button">{_podlove_button_html()}</div>'
         '</div>'
         '</section>'
-        f'<div class="episode-list">{rows or empty}</div>'
-        '</div>'
     )
 
     alt_feed = (f'<link rel="alternate" type="application/rss+xml" '
                 f'title="{esc(cfg["title"])} podcast feed" '
                 f'href="{SITE_URL}{podcast_feed_href()}" />')
-    # On a podcast-first site this IS the homepage, so it is written as
-    # index.html and /podcast.html is not generated at all - two URLs serving
-    # the same list is a duplicate every search engine has to pick between.
-    # htaccess_content() 301s the old one, so existing links still land.
-    at_home = podcast_is_home()
-    filename = "index.html" if at_home else PODCAST_PAGE_NAME
-    page = safe_render(base_template, {
-        "%PAGE_TITLE%": (f"{esc(cfg['title'])}" if at_home
-                         else f"{esc(cfg['title'])} — {esc(SITE_NAME)}"),
-        "%META_DESCRIPTION%": esc(cfg['description'])[:300],
-        "%OG_TYPE%": "website",
-        "%PAGE_SLUG%": filename,
-        "%ALT_FEED_LINK%": alt_feed,
-        "%STRUCTURED_DATA%": "",
-        "%MAIN_CONTENT%": main,
-    })
-    write_file_if_changed(os.path.join(PUBLIC_DIR, filename), page)
-    if not at_home:
-        # '/' is already the first entry in sitemap_urls.
-        sitemap_urls.append(f"{SITE_URL}{podcast_href()}")
+    for page_idx in range(total_pages):
+        page_num = page_idx + 1
+        chunk = episodes[page_idx * PAGE_SIZE:(page_idx + 1) * PAGE_SIZE]
+        rows = "".join(_episode_row_html(p) for p in chunk)
+
+        # The full show header appears on page one only. Deeper pages are for
+        # someone already looking through the archive, and the one thing the
+        # header carries that they still need - Subscribe - is in the site
+        # header on every page anyway.
+        if page_num == 1:
+            head = hero
+        else:
+            head = (f'<p class="podcast-eyebrow">Podcast</p>'
+                    f'<h1>{esc(cfg["title"])}</h1>')
+
+        main = (
+            '<div class="article-content page-content">'
+            f'{head}'
+            f'<div class="episode-list">{rows or empty}</div>'
+            f'{pager_html(page_num, total_pages, page_href)}'
+            '</div>'
+        )
+
+        # On a podcast-first site this IS the homepage, so page one is written
+        # as index.html and /podcast.html is not generated at all - two URLs
+        # serving the same list is a duplicate every search engine has to pick
+        # between. htaccess_content() 301s the old one, so links still land.
+        filename = page_href(page_num).lstrip('/')
+        page = safe_render(base_template, {
+            "%PAGE_TITLE%": (f"{esc(cfg['title'])}" if at_home and page_num == 1
+                             else f"{esc(cfg['title'])} — {esc(SITE_NAME)}"
+                             + (f" (Page {page_num})" if page_num > 1 else "")),
+            "%META_DESCRIPTION%": esc(cfg['description'])[:300],
+            "%OG_TYPE%": "website",
+            "%PAGE_SLUG%": filename,
+            "%ALT_FEED_LINK%": alt_feed,
+            "%STRUCTURED_DATA%": "",
+            "%MAIN_CONTENT%": main,
+        })
+        write_file_if_changed(os.path.join(PUBLIC_DIR, filename), page)
+        # '/' is already the sitemap's first entry; everything else is new.
+        if not (at_home and page_num == 1):
+            sitemap_urls.append(f"{SITE_URL}{page_href(page_num)}")
 
 
 def render_standalone_pages(base_template, sitemap_urls):

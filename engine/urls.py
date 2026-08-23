@@ -73,9 +73,18 @@ def podcast_feed_href():
     """Root-absolute URL path for the podcast (iTunes) feed."""
     return f"/{PODCAST_FEED_NAME}"
 
-def podcast_href():
-    """Root-absolute URL path for the generated podcast index page."""
-    return f"/{PODCAST_PAGE_NAME}"
+def podcast_href(page=1):
+    """Root-absolute URL path for the podcast index / its pagination.
+
+    Note that on a podcast-first site the episode list is the homepage, so its
+    pagination is home_href()'s, not this. Callers go through
+    build_blog.podcast_is_home() rather than choosing here, because this module
+    knows about URL shapes and nothing about configuration.
+    """
+    if page == 1:
+        return f"/{PODCAST_PAGE_NAME}"
+    stem = PODCAST_PAGE_NAME[:-len('.html')]
+    return f"/{stem}-{page}.html"
 
 def archive_href(page=1):
     """Root-absolute URL path for the written archive / its pagination.
