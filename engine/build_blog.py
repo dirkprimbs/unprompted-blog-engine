@@ -1530,6 +1530,33 @@ def _episode_row_html(post):
     )
 
 
+# Directories are brands, and a brand has a spelling. Title-casing the config
+# key gets "Apple" and "Pocketcasts" where the buttons should read "Apple
+# Podcasts" and "Pocket Casts" - close enough to look like a mistake rather
+# than a style. Anything not listed still falls back to the key, title-cased,
+# so a directory the engine has never heard of works without a code change.
+_DIRECTORY_LABELS = {
+    'apple': 'Apple Podcasts',
+    'itunes': 'Apple Podcasts',
+    'spotify': 'Spotify',
+    'fyyd': 'fyyd',
+    'pocketcasts': 'Pocket Casts',
+    'overcast': 'Overcast',
+    'deezer': 'Deezer',
+    'amazon': 'Amazon Music',
+    'youtube': 'YouTube Music',
+    'podcastindex': 'Podcast Index',
+    'castbox': 'Castbox',
+    'antennapod': 'AntennaPod',
+    'podchaser': 'Podchaser',
+}
+
+
+def _directory_label(name):
+    key = str(name).strip().lower().replace('_', '').replace('-', '').replace(' ', '')
+    return _DIRECTORY_LABELS.get(key, str(name).replace('_', ' ').title())
+
+
 def build_podcast_page(base_template, episodes, sitemap_urls):
     """Write public/podcast.html: the show header, the subscribe options, and
     every episode.
@@ -1544,7 +1571,7 @@ def build_podcast_page(base_template, episodes, sitemap_urls):
         return
     cfg = PODCAST
     pills = ''.join(
-        f'<a href="{esc(url)}">{esc(name.replace("_", " ").title())}</a>'
+        f'<a href="{esc(url)}">{esc(_directory_label(name))}</a>'
         for name, url in cfg['links'].items()
     )
     empty = ('<p>No episodes yet. Link an audio file from a post and it '
