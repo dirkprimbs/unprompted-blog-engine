@@ -207,6 +207,44 @@ site down to fix a redirect is a bad trade.
 
 ---
 
+## 6a. Alt text - check every image before calling the migration done
+
+**Do this on the next project rather than after it.** A WordPress export is raw
+`<img>` tags carrying `alt=""`, because the field was never filled in. The engine
+now captions those (see `_caption_html_images`) - it did not until this migration
+exposed the gap - but auto-captioning is a floor, not a finish:
+
+- **It only covers images the build can see.** Hosted assets referenced from
+  `content/*.md` get captioned. Three categories do not, and each has to be done
+  by hand:
+  - images in `pages/*.md`, because `process_content_media()` never scans that
+    directory;
+  - remote images, which are not fetched on every build to describe a picture
+    that may 404;
+  - anything whose file was lost with the old host.
+- **A vision model describes what it sees, not what the image is for.** "A
+  screenshot of a digital audio workstation timeline showing multiple coloured
+  tracks" is accurate and useless if the point of the screenshot was one
+  specific setting. Read every generated caption against the surrounding prose
+  and rewrite the ones that describe the wrong thing.
+- **Decorative images should keep `alt=""`.** Captioning a spacer or a
+  repeated logo makes a screen reader worse, not better. Auto-captioning cannot
+  tell the difference; you can.
+
+Alt text goes in **English**, matching what the engine generates, even on a
+German site. (The usual accessibility convention is to match the document
+language, so this is a deliberate house choice rather than an oversight - worth
+knowing before "correcting" it.)
+
+Audit before deploying:
+
+```python
+# every <img> across content/ and pages/, bucketed by described / empty-local /
+# empty-remote - anything not "described" is a decision you have not made yet
+```
+
+---
+
 ## 7. Deploy
 
 - **Check `FTP_REMOTE_DIR` before the first deploy.** `lftp mirror --delete`
@@ -256,6 +294,8 @@ Then:
 - [ ] Cover art ≥1400px square
 - [ ] Favicon replaced (`.ico`, `.png` **and `.svg`**)
 - [ ] robots.txt written
+- [ ] Every image audited: captions reviewed, pages/ and remote images done by
+      hand, decorative ones left empty
 - [ ] `/feed/mp3/` redirect verified **on the host**, not just in the file
 - [ ] No `announce: pending` anywhere
 - [ ] FTP target confirmed before the first `--deploy`
