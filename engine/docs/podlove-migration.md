@@ -235,6 +235,22 @@ site down to fix a redirect is a bad trade.
 
 ---
 
+## 5a. Per-episode artwork
+
+Check `<itunes:image>` on the items, not just on the channel. A show where every
+episode carries the same logo loses nothing by dropping it - the app falls back
+to the channel art, which is the same picture. A show where each episode has its
+own poster loses the posters, and nobody notices until an app shows sixteen
+identical thumbnails where there used to be sixteen films.
+
+```python
+# unique per-episode <itunes:image> values in the old feed
+# 1  -> drop it, the channel art covers it
+# n  -> carry it: copy each into content/assets/ and set `image:` per post
+```
+
+---
+
 ## 6a. Alt text - check every image before calling the migration done
 
 **Do this on the next project rather than after it.** A WordPress export is raw
@@ -328,6 +344,8 @@ Then:
 - [ ] `podcast.guid` pinned in site.yaml
 - [ ] Tags joined from wp-json
 - [ ] Non-episode posts imported
+- [ ] Per-episode `<itunes:image>` checked: one shared image is droppable,
+      distinct ones are not
 - [ ] Audio filenames preserved; renames found by diffing the enclosure list
       against content/audio/, and each given its own redirect first
 - [ ] A real /feed/ directory shipped in public_static/ (the MultiViews trap -

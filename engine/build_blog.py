@@ -330,6 +330,22 @@ def _remote_audio_size(url):
     return size
 
 
+def _episode_artwork(episode_or_meta):
+    """An episode's own artwork as a root-absolute path, or '' for none.
+
+    Accepts either the episode dict or the post meta, because the row builder
+    has one and the player builder the other. A remote URL is passed through
+    untouched; a hosted asset is made root-absolute, since an episode page lives
+    under /posts/ and a relative 'assets/...' would resolve inside it.
+    """
+    src = str((episode_or_meta or {}).get('image') or '').strip()
+    if not src:
+        return ''
+    if _is_remote(src) or src.startswith('/'):
+        return src
+    return '/' + src.lstrip('/')
+
+
 def _player_html(episode):
     """The episode player: cover, show name, one big play control, actions.
 
@@ -340,7 +356,7 @@ def _player_html(episode):
     cannot play its episode has no content at all.
     """
     stated = audio.format_duration(episode.get('seconds')) or ''
-    cover = (PODCAST or {}).get('cover', '')
+    cover = _episode_artwork(episode) or (PODCAST or {}).get('cover', '')
     cover_img = (f'<img src="{esc(cover)}" alt="{esc((PODCAST or {}).get("title", ""))}'
                  f' cover art">' if cover else '')
     duration_attr = f' data-duration="{esc(stated)}"' if stated else ''
@@ -438,11 +454,16 @@ def embed_audio(markdown_text, meta):
             if meta.get('audio_bytes'):
                 size = int(meta['audio_bytes'])
 
+        # A show whose episodes each have their own artwork - a film poster, a
+        # guest portrait - says so with `image:` in the post's frontmatter. It
+        # falls back to the show cover, which is what most podcasts want.
+        artwork = str(meta.get('image') or '').strip()
         current = {
             'url': url,
             'bytes': int(size or 0),
             'seconds': seconds,
             'mime': mime,
+            'image': artwork,
             'post_title': str(meta.get('title', '')),
         }
         if episode is None:
@@ -1568,7 +1589,7 @@ def _episode_row_html(post):
     except ValueError:
         day, month, year = '', raw, ''
 
-    cover = (PODCAST or {}).get('cover', '')
+    cover = _episode_artwork(post.get('episode')) or (PODCAST or {}).get('cover', '')
     art = (f'<img class="episode-art" src="{esc(cover)}" alt="">' if cover else '')
 
     facts = []
@@ -2199,6 +2220,10 @@ def podcast_item_xml(post):
     explicit = post.get('explicit')
     explicit = PODCAST['explicit'] if explicit is None else bool(explicit)
     optional.append(f'<itunes:explicit>{str(explicit).lower()}</itunes:explicit>')
+    art = _episode_artwork(post.get('episode'))
+    if art:
+        art_url = SITE_URL + art if art.startswith('/') else art
+        optional.append(f'<itunes:image href="{html.escape(art_url, quote=True)}" />')
 
     url = SITE_URL + episode['url'] if episode['url'].startswith('/') else episode['url']
     extras = "\n            ".join(optional)
