@@ -38,7 +38,7 @@ from config import (
     SITE_LANGUAGE, THEME,
 )
 from paths import (
-    REPO_ROOT, TEMPLATE_PATH, STATIC_SOURCE_DIRS,
+    REPO_ROOT, TEMPLATE_PATH, SITE_TEMPLATE_PATH, STATIC_SOURCE_DIRS,
     PUBLIC_DIR, PUBLIC_ASSETS_DIR,
     PODCAST_ONLY_ASSETS, SITE_STATIC_DIR,
     CONTENT_DIR, CONTENT_ASSETS_DIR, CONTENT_AUDIO_DIR, PUBLIC_AUDIO_DIR,
@@ -89,6 +89,20 @@ def plain_text(html_body):
     return re.sub(r'\s+', ' ', text).strip()
 
 def load_template():
+    """The page template: this site's own if it has one, else the engine's.
+
+    A site-level templates/base.html wins, mirroring how public_static/ shadows
+    a same-named theme file. It is announced rather than silent, because the
+    template is not only presentation - it carries the placeholder contract with
+    this module, and a fork keeps working while quietly missing whatever the
+    engine adds next.
+    """
+    if os.path.exists(SITE_TEMPLATE_PATH):
+        print(f"   📄 Using this site's own base.html "
+              f"({_rel_to_repo(SITE_TEMPLATE_PATH)}); the engine's is ignored.")
+        _warn_template_drift()
+        with open(SITE_TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            return f.read()
     if not os.path.exists(TEMPLATE_PATH):
         raise FileNotFoundError(
             f"❌ Template file not found at '{TEMPLATE_PATH}'. "
@@ -96,6 +110,36 @@ def load_template():
         )
     with open(TEMPLATE_PATH, "r", encoding="utf-8") as f:
         return f.read()
+
+
+def _rel_to_repo(path):
+    try:
+        return os.path.relpath(path, REPO_ROOT)
+    except ValueError:
+        return path
+
+
+def _warn_template_drift():
+    """Name the placeholders the engine fills that this site's template lacks.
+
+    This is the whole cost of forking the template, made visible. Every one of
+    these is a feature the engine grew and this page will not show - and without
+    the warning the only symptom is something missing that nobody remembers
+    should be there.
+    """
+    try:
+        with open(SITE_TEMPLATE_PATH, 'r', encoding='utf-8') as fh:
+            site = fh.read()
+        with open(TEMPLATE_PATH, 'r', encoding='utf-8') as fh:
+            engine = fh.read()
+    except OSError:
+        return
+    missing = [token for token in sorted(set(re.findall(r'%[A-Z_]+%', engine)))
+               if token not in site]
+    if missing:
+        print(f"   ⚠️  It is missing {len(missing)} placeholder(s) the engine "
+              f"now fills: {', '.join(missing)}")
+        print(f"      Diff it against engine/templates/base.html to pick them up.")
 
 def write_file_if_changed(filepath, content):
     abs_path = os.path.abspath(filepath)

@@ -37,6 +37,12 @@ pages/
 # output made from the author's own posts and photos, same as the rest here.
 zines/
 
+# A site's own page template, when it has one. engine/templates/base.html is the
+# engine's and is tracked; a file here overrides it for this deployment only -
+# markup the engine has no config key for, without editing the shared template
+# and shipping that edit to every other site. See paths.SITE_TEMPLATE_PATH.
+templates/
+
 # Compiled output
 public/
 

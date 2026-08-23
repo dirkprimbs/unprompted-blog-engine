@@ -216,6 +216,11 @@ links:
 #   #   fyyd: "https://fyyd.de/podcast/..."
 
 
+# Markup the engine has no key for? Put your own copy of the page template at
+# templates/base.html in the repo root and it wins over the engine's. It is
+# gitignored, so it stays with this deployment. The build says so when it uses
+# one, and warns about placeholders the engine has since added.
+
 # --- Redirects (optional) ----------------------------------------------------
 # Old path -> new path, emitted as 301s at the top of the generated .htaccess.
 # A list of single-key pairs rather than one mapping, because the order Apache

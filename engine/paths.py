@@ -40,6 +40,20 @@ PROMPTS_PATH = os.path.join(ENGINE_DIR, "prompts.yaml")
 TEMPLATES_DIR = os.path.join(ENGINE_DIR, "templates")
 TEMPLATE_PATH = os.path.join(TEMPLATES_DIR, "base.html")
 
+# A site may keep its own base.html here and it wins over the engine's, the same
+# way public_static/ shadows a same-named theme file. That is the escape hatch
+# for markup the engine has no config key for - a landing page that wants no RSS
+# link in its header, say - and it exists because the alternative was editing
+# the tracked template inside a site folder, which is an engine change that then
+# travels to every other site.
+#
+# The trade is real and the build says so out loud when the override is in use:
+# base.html is not only presentation, it carries the placeholder contract with
+# build_blog.py (%SITE_LANG%, %SUBSCRIBE_ITEM%, %THEME_OVERRIDES%, ...). A fork
+# keeps working and quietly stops receiving anything new. Diff it against the
+# engine's after an engine update.
+SITE_TEMPLATE_PATH = os.path.join(REPO_ROOT, "templates", "base.html")
+
 # The theme: CSS, client-side search, the vendored comment sanitizer, favicons,
 # and the self-hosted fonts. Tracked in git - these are engine dependencies, not
 # site content. Flattened into public/ at publish time, which is why the theme is
