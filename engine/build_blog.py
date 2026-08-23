@@ -11,7 +11,7 @@ import uuid
 import mimetypes
 import urllib.request
 from urllib.parse import urlparse
-from datetime import datetime
+from datetime import datetime, timezone
 import email.utils
 
 import llm    # shared model layer: roles, call_model, generate_alt_text
@@ -1682,14 +1682,24 @@ def item_pubdate(post):
     change.
     """
     raw = post.get('published') or post.get('date')
+
+    # Frontmatter carries wall-clock times with no zone, and they are read as
+    # UTC. datetime.timestamp() on a naive value would read them as the *build
+    # machine's* local time instead, which silently shifts every date in the
+    # feed by the builder's offset - and makes a migrated episode disagree with
+    # the pubDate its old feed published, which is the one thing an import must
+    # reproduce exactly.
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
         try:
             dt = datetime.strptime(str(raw).replace('Z', '').strip()[:19], fmt)
-            return email.utils.formatdate(dt.timestamp(), usegmt=True)
+            return email.utils.format_datetime(dt.replace(tzinfo=timezone.utc),
+                                               usegmt=True)
         except (ValueError, TypeError):
             continue
     if isinstance(raw, datetime):
-        return email.utils.formatdate(raw.timestamp(), usegmt=True)
+        if raw.tzinfo is None:
+            raw = raw.replace(tzinfo=timezone.utc)
+        return email.utils.format_datetime(raw, usegmt=True)
     return email.utils.formatdate(usegmt=True)
 
 
@@ -1872,12 +1882,11 @@ def podcast_feed_xml(episodes, last_build_date_rfc):
 
 
 def feed_build_date(posts_list):
+    # Same UTC rule as item_pubdate(): a frontmatter date is a wall-clock date,
+    # not a moment in the builder's timezone. Reusing that function also means
+    # <lastBuildDate> and the newest <pubDate> can never disagree.
     if posts_list:
-        try:
-            dt = datetime.strptime(str(posts_list[0]['date']), "%Y-%m-%d")
-            return email.utils.formatdate(dt.timestamp(), usegmt=True)
-        except (ValueError, TypeError):
-            pass
+        return item_pubdate(posts_list[0])
     return email.utils.formatdate(usegmt=True)
 
 def build_site():
