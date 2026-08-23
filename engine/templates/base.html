@@ -105,10 +105,6 @@
                          is one, the engine's built-in About/social/Contact list
                          when there isn't. See _header_nav_html(). -->
                     %HEADER_NAV%
-                    <!-- Subscribe: engine furniture like the RSS link, present on
-                         every page when site.yaml configures a podcast, empty
-                         otherwise. See _subscribe_item_html(). -->
-                    %SUBSCRIBE_ITEM%
                     <a href="/feed.xml" target="_blank" style="display: inline-flex; align-items: center; gap: 5px;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg>RSS
                     </a>
@@ -119,6 +115,13 @@
                     </button>
                 </div>
             </div>
+            <!-- The right-hand group: subscribing and searching, the two
+                 things a reader does to the site rather than in it. -->
+            <div class="nav-right">
+            <!-- Subscribe: engine furniture like the RSS link, present on every
+                 page when site.yaml configures a podcast, empty otherwise.
+                 See _subscribe_item_html(). -->
+            %SUBSCRIBE_ITEM%
             <!-- Local, in-browser full-text search. No third party: the index
                  (/search-index.json) is built from the posts and searched
                  client-side by /search.js, which is lazy-loaded on first use. -->
@@ -137,6 +140,7 @@
                 <div id="search-results" class="search-results" role="listbox"
                      aria-label="Search results" hidden></div>
             </div>
+            </div><!-- /.nav-right -->
         </div>
     </header>
     <div class="container">

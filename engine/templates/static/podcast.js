@@ -10,6 +10,23 @@
 (function () {
     'use strict';
 
+    // The header's Subscribe link. Its href is the feed, so it works with no
+    // JavaScript at all and keeps working if the Podlove widget fails to load.
+    // But Podlove's own handler opens its app chooser WITHOUT cancelling the
+    // click, so when the widget is present both happen: the popup opens and the
+    // browser navigates away to the raw XML underneath it.
+    //
+    // The check happens at click time rather than at load: this file is
+    // deferred and Podlove binds on DOMContentLoaded, so at load time its
+    // instances do not exist yet. If they never appear - script blocked,
+    // offline, CDN of one's own broken - nothing is cancelled and the link
+    // still does the useful thing.
+    document.querySelectorAll('.subscribe-link').forEach(function (link) {
+        link.addEventListener('click', function (event) {
+            if (window.subscribeButtons) event.preventDefault();
+        });
+    });
+
     function fmt(seconds) {
         if (!isFinite(seconds)) return '--:--';
         var s = Math.floor(seconds % 60);

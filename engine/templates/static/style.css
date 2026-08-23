@@ -168,10 +168,23 @@ header:has(.site-branding) .logo { display: none; }
    a listener who wants it should not have to find the podcast page first. Kept
    to the same height as its neighbours so the row still reads as one bar of
    controls rather than as a banner dropped into it. */
+/* The right-hand group: subscribing and searching sit together, opposite the
+   menu. Subscribe belongs here rather than among the nav links because it is
+   not a place on the site - it is the thing a reader leaves with. */
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
 .subscribe-link {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    /* Spelled out rather than inherited: this link lives in .nav-right now,
+       outside the .header-links rule that removes underlines from the menu. */
+    text-decoration: none;
+    font-size: 14px;
     padding: 5px 12px;
     border-radius: 999px;
     background: var(--accent);
@@ -296,6 +309,10 @@ header:has(.site-branding) .logo { display: none; }
     .site-nav {
         flex: 1 1 100%;
         order: -1;
+    }
+    /* Subscribe and search stay paired when the menu wraps above them. */
+    .nav-right {
+        gap: 10px;
     }
     .site-nav .nav-menu {
         flex-wrap: wrap;

@@ -1257,7 +1257,12 @@ def _podlove_button_html(hidden=False):
         'title': cfg['title'],
         'subtitle': cfg['subtitle'],
         'description': cfg['description'],
-        'cover': SITE_URL + cover if cover.startswith('/') else cover,
+        # Root-relative, not absolutised. The button renders in an iframe on
+        # this same origin, so a relative path resolves correctly there - and
+        # unlike an absolute one it also resolves while previewing on
+        # 127.0.0.1, where the configured domain does not answer and the cover
+        # would otherwise be a broken image in the popup.
+        'cover': cover,
         'feeds': [{
             'type': 'audio',
             'format': 'mp3',
@@ -1390,9 +1395,6 @@ def build_podcast_page(base_template, episodes, sitemap_urls):
         "%PAGE_SLUG%": PODCAST_PAGE_NAME,
         "%ALT_FEED_LINK%": alt_feed,
         "%STRUCTURED_DATA%": "",
-        "%PODCAST_SCRIPT%": (
-            f'<script src="/podcast.js?v={_asset_version()}" defer></script>'
-        ),
         "%MAIN_CONTENT%": main,
     })
     write_file_if_changed(os.path.join(PUBLIC_DIR, PODCAST_PAGE_NAME), page)
@@ -1638,9 +1640,15 @@ def safe_render(template, mappings):
     # thread, so it defaults to nothing (same shape as %OG_IMAGE_TAGS% below).
     if "%COMMENTS_SCRIPT%" not in mappings:
         mappings["%COMMENTS_SCRIPT%"] = ""
-    # Same bargain for the episode player: only a page with one fetches it.
+    # The player script also drives the header's Subscribe link, which is on
+    # every page of a podcast site - so unlike the comments renderer this one is
+    # not scoped to pages that carry a player. A site with no podcast still
+    # never fetches it.
     if "%PODCAST_SCRIPT%" not in mappings:
-        mappings["%PODCAST_SCRIPT%"] = ""
+        mappings["%PODCAST_SCRIPT%"] = (
+            f'<script src="/podcast.js?v={_asset_version()}" defer></script>'
+            if PODCAST_ENABLED else ''
+        )
     # Only posts with an image of their own emit og:image/twitter:image tags.
     # Everything else (homepage, tag pages, and imageless posts) omits them.
     if "%OG_IMAGE_TAGS%" not in mappings:
@@ -2090,10 +2098,6 @@ def build_site():
             "%COMMENTS_SCRIPT%": (
                 f'<script src="/comments.js?v={_asset_version()}" defer></script>'
                 if comments_html else ''
-            ),
-            "%PODCAST_SCRIPT%": (
-                f'<script src="/podcast.js?v={_asset_version()}" defer></script>'
-                if meta.get('episode') else ''
             ),
             # An episode page advertises the podcast feed as well as the blog's,
             # so a browser's feed discovery - and anything scraping for one -
