@@ -1197,7 +1197,45 @@ def generate_post_feed_html(posts_list, title_text, current_page=1, total_pages=
         
     return f"<h1>{title_text}</h1>" + feed_body + pagination_html
 
-def _podlove_button_html():
+# One id for the header's subscribe trigger. Fixed rather than random so the
+# markup is identical on every page and byte-for-byte stable between builds -
+# a changing id would rewrite every page in public/ on every build and make the
+# FTP mirror re-upload the whole site.
+_SUBSCRIBE_BUTTON_ID = 'header-subscribe'
+
+
+def _subscribe_item_html():
+    """The Subscribe control in the header, on every page of a podcast site.
+
+    Podlove's widget normally renders itself as a large button wherever its
+    script tag sits, which is not a thing that fits in a row of nav links. It
+    also supports being hidden and driven from an element of the author's own
+    (`data-hide` plus `data-buttonid`, and a trigger carrying the matching
+    class), which is what this uses: an ordinary link, styled like its
+    neighbours, that opens Podlove's app chooser.
+
+    The plain href is the feed, so the link is useful before the script loads
+    and remains useful if it never does - the popup is an enhancement over a
+    link that already works.
+    """
+    if not PODCAST_ENABLED:
+        return ''
+    return (
+        f'{_podlove_button_html(hidden=True)}'
+        f'<a href="{esc(podcast_feed_href())}" '
+        f'class="subscribe-link podlove-subscribe-button-{_SUBSCRIBE_BUTTON_ID}">'
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+        'stroke-linejoin="round" style="flex-shrink:0">'
+        '<path d="M12 2a10 10 0 0 0-10 10c0 3.5 1.8 6.6 4.5 8.4"/>'
+        '<path d="M12 6a6 6 0 0 0-6 6c0 2 1 3.8 2.5 4.9"/>'
+        '<circle cx="12" cy="12" r="2.2"/>'
+        '<path d="M10.6 22h2.8l-.7-6h-1.4z"/>'
+        '</svg>Subscribe</a>'
+    )
+
+
+def _podlove_button_html(hidden=False):
     """The vendored Podlove subscribe button, configured inline.
 
     Config goes in a global rather than through the widget's `data-json-url`
@@ -1239,9 +1277,13 @@ def _podlove_button_html():
         f'src="/subscribe-button/javascripts/app.js" '
         f'data-json-data="podcastData" data-language="{esc(PODCAST["language"][:2])}" '
         f'data-size="big" data-style="filled" data-format="rectangle" '
-        f'data-color="{esc(cfg["button_color"])}"></script>'
-        f'<noscript><a href="{esc(podcast_feed_href())}">Subscribe to the feed</a>'
-        f'</noscript>'
+        f'data-color="{esc(cfg["button_color"])}"'
+        + (f' data-hide="true" data-buttonid="{_SUBSCRIBE_BUTTON_ID}"'
+           if hidden else '')
+        + '></script>'
+        + ('' if hidden else
+           f'<noscript><a href="{esc(podcast_feed_href())}">'
+           f'Subscribe to the feed</a></noscript>')
     )
 
 
@@ -1580,6 +1622,7 @@ def safe_render(template, mappings):
     # element by element, since these are the one place author text becomes
     # markup rather than an attribute value.
     mappings.setdefault("%HEADER_NAV%", _header_nav_html())
+    mappings.setdefault("%SUBSCRIBE_ITEM%", _subscribe_item_html())
     mappings.setdefault("%SITE_BRANDING%", _site_branding_html())
     # Same reasoning one level up: the meta tag exists to make Mastodon show the
     # author's handle on link previews, so with no handle configured the whole

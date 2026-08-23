@@ -163,6 +163,28 @@ header:has(.site-branding) .logo { display: none; }
     color: var(--accent);
 }
 
+/* Subscribe in the header, on every page of a podcast site. Filled rather than
+   another muted link: it is the one action the whole site exists to invite, and
+   a listener who wants it should not have to find the podcast page first. Kept
+   to the same height as its neighbours so the row still reads as one bar of
+   controls rather than as a banner dropped into it. */
+.subscribe-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-fg) !important;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: filter 0.2s ease;
+}
+.subscribe-link:hover {
+    filter: brightness(1.08);
+    color: var(--accent-fg) !important;
+}
+
 /* --- CONFIGURED MENU (site.yaml `nav:`) ---
    Only rendered when the author configured one; a site without `nav:` gets the
    plain .header-links row above and none of this applies. */
@@ -1416,27 +1438,67 @@ body:has(.page-panel) .site-footer {
 .episode-play svg[hidden] {
     display: none;
 }
+/* The seek bar is 6px of visible groove inside a 22px hit area. Drawing the
+   groove with ::before rather than as the element's own background is what
+   separates the two: a 6px-tall click target is one nobody can hit, so clicking
+   to seek reads as broken even though the handler is right there. The hit area
+   has to be tall enough to aim at, and the groove has to stay thin to look like
+   a progress bar. */
 .episode-progress {
     flex: 1 1 auto;
+    position: relative;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    /* No text selection while scrubbing: a drag across the bar would otherwise
+       start selecting the duration text beside it. */
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+.episode-progress::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
     height: 6px;
     border-radius: 3px;
     background: var(--surface-hover);
-    cursor: pointer;
-    /* A bare div is not a control. It carries role="slider" in the markup, and
-       needs to take focus so the arrow keys wired up in podcast.js can reach
-       it. */
-    position: relative;
 }
 .episode-progress:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 3px;
+    border-radius: 3px;
 }
 .episode-progress .bar {
+    position: relative;
     display: block;
-    height: 100%;
+    height: 6px;
     width: 0;
     border-radius: 3px;
     background: var(--accent);
+}
+/* A thumb, so the bar reads as something you can grab rather than as a read-out.
+   It sits at the end of the filled portion and only appears once there is a
+   pointer on the control or focus in it. */
+.episode-progress .bar::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: 13px;
+    height: 13px;
+    margin-right: -6px;
+    border-radius: 50%;
+    background: var(--accent);
+    transform: translateY(-50%) scale(0);
+    transition: transform 0.12s ease;
+}
+.episode-progress:hover .bar::after,
+.episode-progress:focus-visible .bar::after,
+.episode-progress.is-scrubbing .bar::after {
+    transform: translateY(-50%) scale(1);
 }
 .episode-elapsed {
     flex: 0 0 auto;

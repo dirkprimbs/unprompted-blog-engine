@@ -604,6 +604,23 @@ The feed is never capped at `FEED_ITEMS`. A blog feed is a what's-new list; a
 podcast feed is the show's whole catalogue, and an episode falling out of it
 disappears from every directory and every app's back catalogue.
 
+### `_subscribe_item_html()`
+
+The Subscribe control in the header, on every page of a podcast site, beside the
+RSS link and the theme toggle.
+
+Podlove's widget normally renders itself as a large button wherever its script
+tag sits, which is not a thing that fits in a row of nav links. It also supports
+being hidden and driven from an element of the author's own (`data-hide` plus
+`data-buttonid`, and a trigger carrying the matching class) - which is what this
+uses: an ordinary link, styled like its neighbours, that opens Podlove's app
+chooser.
+
+The `href` is the feed itself, so the link is useful before the script loads and
+stays useful if it never does. The button id is fixed rather than random, so the
+markup is byte-identical between builds - a changing id would rewrite every page
+in `public/` on every build and make the FTP mirror re-upload the whole site.
+
 ### `_podlove_button_html()`
 
 The vendored Podlove subscribe button, configured inline.

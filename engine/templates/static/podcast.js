@@ -94,12 +94,37 @@
             var ratio = Math.min(1, Math.max(0, (clientX - box.left) / box.width));
             if (audio.duration) audio.currentTime = ratio * audio.duration;
         }
-        track.addEventListener('click', function (e) { seekTo(e.clientX); });
+
+        // Click to jump, drag to scrub. Pointer events rather than mouse ones so
+        // a touchscreen gets the same behaviour, and setPointerCapture so a drag
+        // that wanders off the bar - which every drag does - keeps scrubbing
+        // instead of stopping the moment the pointer leaves.
+        track.addEventListener('pointerdown', function (e) {
+            if (e.button && e.button !== 0) return;
+            e.preventDefault();
+            track.classList.add('is-scrubbing');
+            try { track.setPointerCapture(e.pointerId); } catch (err) {}
+            seekTo(e.clientX);
+        });
+        track.addEventListener('pointermove', function (e) {
+            if (!track.classList.contains('is-scrubbing')) return;
+            seekTo(e.clientX);
+        });
+        function endScrub(e) {
+            if (!track.classList.contains('is-scrubbing')) return;
+            track.classList.remove('is-scrubbing');
+            try { track.releasePointerCapture(e.pointerId); } catch (err) {}
+        }
+        track.addEventListener('pointerup', endScrub);
+        track.addEventListener('pointercancel', endScrub);
         track.addEventListener('keydown', function (e) {
+            var duration = audio.duration || 0;
             var step = e.key === 'ArrowRight' ? 15 : e.key === 'ArrowLeft' ? -15 : 0;
+            if (e.key === 'Home') { audio.currentTime = 0; e.preventDefault(); return; }
+            if (e.key === 'End') { audio.currentTime = duration; e.preventDefault(); return; }
             if (!step) return;
             e.preventDefault();
-            audio.currentTime = Math.max(0, Math.min(audio.duration || 0, audio.currentTime + step));
+            audio.currentTime = Math.max(0, Math.min(duration, audio.currentTime + step));
         });
 
         paint();

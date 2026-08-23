@@ -301,10 +301,14 @@ preview_banner() {
 #   - It binds 127.0.0.1, NOT 0.0.0.0. An unpublished site is nobody else's
 #     business, and a laptop on a cafe network should not be quietly hosting the
 #     next post to everyone on it. Change this only on purpose.
-#   - python3's http.server does not read .htaccess, so the 301s from the old
-#     flat URLs, the gzip and the immutable caching are all absent here. The
-#     pages and their links are what this checks; the redirects need the real
-#     Apache host.
+#   - It does not read .htaccess, so the 301s from the old flat URLs, the gzip
+#     and the immutable caching are all absent here. The pages and their links
+#     are what this checks; the redirects need the real Apache host.
+#
+# It is engine/preview_server.py rather than `python3 -m http.server` for one
+# reason: the stdlib server answers a Range request with the whole file, and a
+# browser reads that as "cannot do partial content" and disables seeking in
+# audio. The episode player then looks broken while being perfectly correct.
 serve_site() {
     local port="${1:-8000}"
     if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
@@ -327,7 +331,7 @@ serve_site() {
     # exec: this is the last thing the script does, and handing the process
     # straight to python means Ctrl-C stops the server instead of being caught
     # somewhere in between.
-    exec python3 -m http.server "$port" --bind 127.0.0.1 --directory public
+    exec python3 engine/preview_server.py "$port" public
 }
 
 # Refuse to upload when there is nothing built. ftp_sync mirrors with --delete,
