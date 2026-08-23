@@ -222,11 +222,18 @@ exposed the gap - but auto-captioning is a floor, not a finish:
   - remote images, which are not fetched on every build to describe a picture
     that may 404;
   - anything whose file was lost with the old host.
-- **A vision model describes what it sees, not what the image is for.** "A
-  screenshot of a digital audio workstation timeline showing multiple coloured
-  tracks" is accurate and useless if the point of the screenshot was one
-  specific setting. Read every generated caption against the surrounding prose
-  and rewrite the ones that describe the wrong thing.
+- **A vision model describes what it sees, not what the image is for**, and it
+  reads labels badly. Reviewing eleven captions on this migration caught, in
+  order of seriousness: a Zoom H2n called "eine digitale Kamera"; a Focusrite
+  Scarlett 18i20 called "Scarlett 20"; the Deutschlandfunk tower reduced to "ein
+  hohes, dunkles Hochhaus"; and a Yellowtec microphone left unnamed in a post
+  whose entire subject was that microphone. All eleven read fluently. **Model
+  numbers in alt text are factual claims** - read them off the image yourself or
+  leave them out.
+
+  The review also caught one caption that was *right* where I assumed it was
+  wrong: a show's cover art really does read "BEISEN & SAUGEN", one `s`. Check
+  before correcting, in both directions.
 - **Decorative images should keep `alt=""`.** Captioning a spacer or a
   repeated logo makes a screen reader worse, not better. Auto-captioning cannot
   tell the difference; you can.
