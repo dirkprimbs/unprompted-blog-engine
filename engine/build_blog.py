@@ -1458,8 +1458,9 @@ def build_podcast_page(base_template, episodes, sitemap_urls):
         if page_num == 1:
             head = hero
         else:
-            head = (f'<p class="podcast-eyebrow">Podcast</p>'
-                    f'<h1>{esc(cfg["title"])}</h1>')
+            head = (f'<div class="podcast-pagehead">'
+                    f'<p class="podcast-eyebrow">Podcast</p>'
+                    f'<h1>{esc(cfg["title"])}</h1></div>')
 
         main = (
             '<div class="article-content page-content">'
