@@ -173,6 +173,13 @@ links:
 #   # this feed and claiming the show as theirs.
 #   # locked: true
 #
+#   # The show's <podcast:guid>. Leave it out for a new podcast and the engine
+#   # derives one from the feed URL. Set it when MIGRATING a show that already
+#   # published one: the spec says this identifier must not change when a feed
+#   # moves, so deriving a new one would make every directory following Podcast
+#   # Index treat this as a different show.
+#   # guid: "54e71306-4546-4161-892a-902dc00d0bd2"
+#
 #   # Set ONLY while moving the show to a new feed URL: every subscribed app
 #   # follows it permanently, so a stray value hands your audience away.
 #   # new_feed_url: "https://example.com/podcast.xml"
@@ -183,6 +190,22 @@ links:
 #   #   apple: "https://podcasts.apple.com/..."
 #   #   spotify: "https://open.spotify.com/show/..."
 #   #   fyyd: "https://fyyd.de/podcast/..."
+
+
+# --- Redirects (optional) ----------------------------------------------------
+# Old path -> new path, emitted as 301s at the top of the generated .htaccess.
+# A list of single-key pairs rather than one mapping, because the order Apache
+# applies them in matters and YAML mappings do not promise to keep theirs.
+#
+# This is for migrations. Moving a site onto this engine changes its URL shape,
+# and the URL that absolutely must not 404 afterwards is the podcast feed: it
+# lives in every subscriber's app and every directory listing, and nobody
+# re-subscribes. Sources match as prefixes, so '/feed/mp3/' also catches
+# '/feed/mp3/index.xml'.
+#
+# redirects:
+#   - "/feed/mp3/": "/podcast.xml"
+#   - "/feed/": "/feed.xml"
 
 footer:
   # The AI transparency label and its explanation. Set label to an empty string

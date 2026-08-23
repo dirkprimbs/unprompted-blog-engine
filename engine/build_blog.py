@@ -34,7 +34,7 @@ from config import (
     LINK_BLUESKY, BLUESKY_CREATOR, SITE_TAGLINE, NAV,
     PAGE_SIZE, FEED_ITEMS, VISIBLE_TAGS, WORDS_PER_MINUTE, TAG_EMOJI,
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
-    PODCAST, PODCAST_ENABLED,
+    PODCAST, PODCAST_ENABLED, REDIRECTS,
 )
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, STATIC_SOURCE_DIRS,
@@ -423,6 +423,13 @@ def show_guid():
     directories that follow it keep tracking the show if the feed itself ever
     moves.
     """
+    # A show that already published a GUID keeps it. The spec derives the
+    # value from the feed URL but is explicit that it must not change when the
+    # feed moves - and a migration is exactly a feed move, so deriving it here
+    # would hand the show a new identity in every directory that follows
+    # Podcast Index.
+    if PODCAST_ENABLED and PODCAST.get('guid'):
+        return PODCAST['guid']
     bare = f"{SITE_URL}{podcast_feed_href()}"
     bare = re.sub(r'^https?://', '', bare).rstrip('/')
     return str(uuid.uuid5(_PODCAST_NAMESPACE, bare))
@@ -2268,7 +2275,7 @@ def build_site():
     # --- LEGACY URL REDIRECTS + PERFORMANCE HEADERS ---
     # One generated .htaccess: 301s from the old flat URLs to the sectioned
     # layout, plus text compression and cache headers for the search assets.
-    write_file_if_changed(os.path.join(PUBLIC_DIR, ".htaccess"), htaccess_content())
+    write_file_if_changed(os.path.join(PUBLIC_DIR, ".htaccess"), htaccess_content(REDIRECTS))
 
     # --- AUTOMATIC CLEANUP OF STALE & REMOVED FILES ---
     # Files that publish.sh will inject into public/ AFTER this build, from each

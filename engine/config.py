@@ -398,11 +398,65 @@ def _podcast():
         # style.css, set this to the same value or the button will be the one
         # element on the page in the old colour.
         'button_color': _opt('button_color') or '#0C7C74',
+        # <podcast:guid> is normally derived from the feed URL, but the spec is
+        # explicit that it must NOT change if the feed later moves - so a show
+        # migrating here has to keep the one its old feed published, or the
+        # directories that follow Podcast Index treat it as a different show.
+        # Empty means "derive it", which is right for a new podcast.
+        'guid': _opt('guid'),
     }
 
 
 PODCAST = _podcast()
 PODCAST_ENABLED = PODCAST is not None
+
+
+def _redirects():
+    """Optional `redirects:` - old path to new path, emitted as 301s.
+
+    A list of single-key mappings rather than one mapping, because order
+    matters in Apache and YAML mappings do not promise to keep theirs:
+
+        redirects:
+          - "/feed/mp3/": "/podcast.xml"
+          - "/feed/":     "/feed.xml"
+
+    This exists for migrations. Moving a site onto this engine changes its URL
+    shape, and the one URL that absolutely cannot 404 afterwards is the podcast
+    feed - it is in every subscriber's app and in every directory listing, and
+    nobody re-subscribes. Redirecting it is the difference between a migration
+    and losing the audience.
+
+    Sources are matched as prefixes without their leading slash, so both
+    '/feed/mp3/' and '/feed/mp3/index.xml' land on the target.
+    """
+    raw = _cfg.get('redirects')
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': redirects must be a list of "
+              f"'old: new' pairs (got {type(raw).__name__}).",
+              "   A list, not a mapping, because the order they are applied in "
+              "matters.")
+    pairs = []
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, dict) or len(entry) != 1:
+            _fail(f"❌ '{SITE_CONFIG_PATH}': redirects[{index}] must be a "
+                  f"single 'old: new' pair.")
+        (source, target), = entry.items()
+        source, target = str(source).strip(), str(target).strip()
+        if not source.startswith('/') or not target.startswith('/'):
+            _fail(f"❌ '{SITE_CONFIG_PATH}': redirects[{index}] needs "
+                  f"root-absolute paths on both sides "
+                  f"(got {source!r} -> {target!r}).")
+        if source == target:
+            _fail(f"❌ '{SITE_CONFIG_PATH}': redirects[{index}] points "
+                  f"{source!r} at itself, which Apache resolves as a loop.")
+        pairs.append((source, target))
+    return pairs
+
+
+REDIRECTS = _redirects()
 
 # --- Images (all optional; see engine/images.py for what they gate) ---
 # max_width 0 means "never downscale" - conversion still applies.
