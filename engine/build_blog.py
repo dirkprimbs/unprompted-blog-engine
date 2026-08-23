@@ -789,6 +789,71 @@ def _optimize_content_asset(disk_path):
     return new_path, f"assets/{os.path.basename(new_path)}"
 
 
+_HTML_IMG_RE = re.compile(r'<img\b[^>]*>', re.IGNORECASE)
+
+
+def _caption_html_images(text, filename, can_caption):
+    """Give raw HTML <img> tags the same alt text treatment Markdown images get.
+
+    process_content_media()'s main loop matches IMG_RE, which is Markdown image
+    syntax. Markdown also permits raw HTML, and imported content is made of it -
+    a WordPress export is <img> tags all the way down, every one of them
+    carrying alt="" because nobody filled the field in. Those images went
+    through the build untouched: hosted correctly, sized correctly, and
+    completely undescribed.
+
+    Only hosted assets are captioned. A remote <img> in imported content is
+    usually a link to a site that has since moved, and fetching each one on
+    every build to describe a picture that may 404 is not a trade worth making.
+
+    An alt attribute that already says something is never overwritten, here as
+    everywhere else: the author's words win.
+    """
+    if not can_caption:
+        return text, False
+
+    changed = False
+    out = []
+    last = 0
+    for match in _HTML_IMG_RE.finditer(text):
+        tag = match.group(0)
+        src = re.search(r'\bsrc="(assets/[^"]+)"', tag)
+        alt = re.search(r'\balt="([^"]*)"', tag)
+        if not src or (alt and alt.group(1).strip()):
+            continue
+
+        disk = os.path.join(CONTENT_DIR, src.group(1))
+        if not os.path.exists(disk):
+            continue
+        try:
+            with open(disk, 'rb') as fh:
+                generated = llm.generate_alt_text(fh.read(), _guess_mime(disk))
+        except SystemExit:
+            # llm.call_model exits on repeated API failure; one caption is not
+            # worth the build.
+            print(f"   ⚠️  Alt-text generation failed for {src.group(1)} - "
+                  f"leaving as-is.")
+            continue
+        if not generated:
+            continue
+
+        safe = esc(generated)
+        if alt:
+            new_tag = tag[:alt.start(1)] + safe + tag[alt.end(1):]
+        else:
+            new_tag = tag[:-1].rstrip('/').rstrip() + f' alt="{safe}">'
+        out.append(text[last:match.start()])
+        out.append(new_tag)
+        last = match.end()
+        changed = True
+        print(f"   🖼️  Alt text for {os.path.basename(src.group(1))}: {generated}")
+
+    if not changed:
+        return text, False
+    out.append(text[last:])
+    return "".join(out), True
+
+
 def _host_audio_links(text, filepath, filename, audio_claims):
     """Copy any standalone local audio link into the audio directories and point
     the Markdown at the hosted copy. Returns (text, changed).
@@ -980,8 +1045,9 @@ def process_content_media():
 
         text, audio_replaced = _host_audio_links(text, filepath, filename,
                                                  audio_claims)
+        text, html_alt_added = _caption_html_images(text, filename, can_caption)
 
-        if replacements or audio_replaced:
+        if replacements or audio_replaced or html_alt_added:
             for old, new in replacements:
                 text = text.replace(old, new, 1)
             write_file_if_changed(filepath, text)
