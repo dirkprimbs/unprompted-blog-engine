@@ -19,9 +19,9 @@ import images # build-time image optimisation (optional Pillow dependency)
 import audio  # episode length/size/MIME (optional mutagen dependency)
 from urls import (
     SITE_URL, POSTS_DIR, TAGS_DIR, FEEDS_DIR, AUDIO_DIR,
-    PODCAST_FEED_NAME, PODCAST_PAGE_NAME,
+    PODCAST_FEED_NAME, PODCAST_PAGE_NAME, ARCHIVE_PAGE_NAME,
     post_href, tag_page_name, tag_href, tag_feed_name, tag_feed_href, home_href,
-    audio_href, podcast_feed_href, podcast_href,
+    audio_href, podcast_feed_href, podcast_href, archive_href,
     slugify_tag, slug_for, read_slug, htaccess_content,
 )
 # Filesystem layout. Note the split: urls.py above supplies URL space (including
@@ -1235,6 +1235,30 @@ def _subscribe_item_html():
     )
 
 
+def _effective_redirects():
+    """The configured redirects, plus any the engine owes for its own layout.
+
+    On a podcast-first site /podcast.html is no longer generated - the show is
+    at '/' - so anything already linking to it would 404. That rule is the
+    engine's to add, not the author's to remember.
+    """
+    pairs = list(REDIRECTS)
+    if podcast_is_home():
+        pairs.append((podcast_href(), '/'))
+    return pairs
+
+
+def podcast_is_home():
+    """True when the show has taken over '/' (site.yaml's podcast.homepage).
+
+    Read through a function rather than a module constant so every caller asks
+    the same question the same way - the answer decides which file the episode
+    list is written to, where the written archive goes, and which of the two
+    the pagination links point at, and those three must never disagree.
+    """
+    return bool(PODCAST_ENABLED and PODCAST.get('homepage'))
+
+
 def _podlove_button_html(hidden=False):
     """The vendored Podlove subscribe button, configured inline.
 
@@ -1388,17 +1412,26 @@ def build_podcast_page(base_template, episodes, sitemap_urls):
     alt_feed = (f'<link rel="alternate" type="application/rss+xml" '
                 f'title="{esc(cfg["title"])} podcast feed" '
                 f'href="{SITE_URL}{podcast_feed_href()}" />')
+    # On a podcast-first site this IS the homepage, so it is written as
+    # index.html and /podcast.html is not generated at all - two URLs serving
+    # the same list is a duplicate every search engine has to pick between.
+    # htaccess_content() 301s the old one, so existing links still land.
+    at_home = podcast_is_home()
+    filename = "index.html" if at_home else PODCAST_PAGE_NAME
     page = safe_render(base_template, {
-        "%PAGE_TITLE%": f"{esc(cfg['title'])} — {esc(SITE_NAME)}",
+        "%PAGE_TITLE%": (f"{esc(cfg['title'])}" if at_home
+                         else f"{esc(cfg['title'])} — {esc(SITE_NAME)}"),
         "%META_DESCRIPTION%": esc(cfg['description'])[:300],
         "%OG_TYPE%": "website",
-        "%PAGE_SLUG%": PODCAST_PAGE_NAME,
+        "%PAGE_SLUG%": filename,
         "%ALT_FEED_LINK%": alt_feed,
         "%STRUCTURED_DATA%": "",
         "%MAIN_CONTENT%": main,
     })
-    write_file_if_changed(os.path.join(PUBLIC_DIR, PODCAST_PAGE_NAME), page)
-    sitemap_urls.append(f"{SITE_URL}{podcast_href()}")
+    write_file_if_changed(os.path.join(PUBLIC_DIR, filename), page)
+    if not at_home:
+        # '/' is already the first entry in sitemap_urls.
+        sitemap_urls.append(f"{SITE_URL}{podcast_href()}")
 
 
 def render_standalone_pages(base_template, sitemap_urls):
@@ -2175,24 +2208,45 @@ def build_site():
     with open(EXISTING_TAGS_PATH, "w", encoding="utf-8") as f:
         json.dump(list(tags_map.keys()), f, indent=2)
 
-    total_posts = len(posts)
+    # The written archive. Normally it is the homepage; on a podcast-first site
+    # it moves to /articles.html and drops the episodes, because those are the
+    # front page there and listing them twice would make the archive a longer
+    # version of the same thing rather than the other half of the site.
+    at_home = podcast_is_home()
+    if at_home:
+        archive_posts = [p for p in posts
+                         if not (p.get('episode') and p.get('podcast') is not False)]
+        archive_heading = "Articles"
+        archive_page_href = archive_href
+        archive_stem = ARCHIVE_PAGE_NAME[:-len('.html')]
+    else:
+        archive_posts = posts
+        archive_heading = "Latest Stories"
+        archive_page_href = home_href
+        archive_stem = "index"
+
+    total_posts = len(archive_posts)
     total_home_pages = max(1, (total_posts + PAGE_SIZE - 1) // PAGE_SIZE)
 
     for page_idx in range(total_home_pages):
         current_page_num = page_idx + 1
         start_sub = page_idx * PAGE_SIZE
         end_sub = start_sub + PAGE_SIZE
-        chunk = posts[start_sub:end_sub]
-        
-        feed_html = generate_post_feed_html(chunk, "Latest Stories", current_page=current_page_num, total_pages=total_home_pages, page_href=home_href)
+        chunk = archive_posts[start_sub:end_sub]
+
+        feed_html = generate_post_feed_html(chunk, archive_heading, current_page=current_page_num, total_pages=total_home_pages, page_href=archive_page_href)
         homepage_content = tag_cloud_html + feed_html
-        
-        index_file_name = "index.html" if current_page_num == 1 else f"index-{current_page_num}.html"
-        if current_page_num > 1:
+
+        index_file_name = (f"{archive_stem}.html" if current_page_num == 1
+                           else f"{archive_stem}-{current_page_num}.html")
+        # Page 1 of a normal homepage is already the sitemap's first entry; the
+        # archive page of a podcast-first site is not, so it needs adding.
+        if current_page_num > 1 or at_home:
             sitemap_urls.append(f"{SITE_URL}/{index_file_name}")
-            
+
         index_html = safe_render(base_template, {
-            "%PAGE_TITLE%": f"{esc(SITE_NAME)} — Home (Page {current_page_num})" if current_page_num > 1 else f"{esc(SITE_NAME)} — Home",
+            "%PAGE_TITLE%": (f"{esc(archive_heading)} — {esc(SITE_NAME)}"
+                             + (f" (Page {current_page_num})" if current_page_num > 1 else "")),
             "%META_DESCRIPTION%": esc(SITE_DESCRIPTION),
             "%OG_TYPE%": "website",
             "%PAGE_SLUG%": index_file_name,
@@ -2331,7 +2385,7 @@ def build_site():
     # --- LEGACY URL REDIRECTS + PERFORMANCE HEADERS ---
     # One generated .htaccess: 301s from the old flat URLs to the sectioned
     # layout, plus text compression and cache headers for the search assets.
-    write_file_if_changed(os.path.join(PUBLIC_DIR, ".htaccess"), htaccess_content(REDIRECTS))
+    write_file_if_changed(os.path.join(PUBLIC_DIR, ".htaccess"), htaccess_content(_effective_redirects()))
 
     # --- AUTOMATIC CLEANUP OF STALE & REMOVED FILES ---
     # Files that publish.sh will inject into public/ AFTER this build, from each

@@ -31,6 +31,11 @@ AUDIO_DIR = "audio"
 PODCAST_FEED_NAME = "podcast.xml"
 PODCAST_PAGE_NAME = "podcast.html"
 
+# Where the written archive lives on a podcast-first site, since '/' is then the
+# episode list. Named for what it holds rather than 'blog' or 'index': a reader
+# looking for the writing is looking for articles.
+ARCHIVE_PAGE_NAME = "articles.html"
+
 def post_href(slug):
     """Root-absolute URL path for a post page. `slug` already ends in '.html'."""
     return f"/{POSTS_DIR}/{slug}"
@@ -71,6 +76,17 @@ def podcast_feed_href():
 def podcast_href():
     """Root-absolute URL path for the generated podcast index page."""
     return f"/{PODCAST_PAGE_NAME}"
+
+def archive_href(page=1):
+    """Root-absolute URL path for the written archive / its pagination.
+
+    Only used when the podcast has taken over '/' - see podcast.homepage. On a
+    normal site the archive IS the homepage and home_href() covers it.
+    """
+    if page == 1:
+        return f"/{ARCHIVE_PAGE_NAME}"
+    stem = ARCHIVE_PAGE_NAME[:-len('.html')]
+    return f"/{stem}-{page}.html"
 
 def slugify_tag(tag):
     """URL/filename-safe slug for a tag. Only affects links and filenames -

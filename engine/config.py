@@ -404,6 +404,13 @@ def _podcast():
         # directories that follow Podcast Index treat it as a different show.
         # Empty means "derive it", which is right for a new podcast.
         'guid': _opt('guid'),
+        # True makes the show the site's front page: '/' becomes the episode
+        # list and the written archive moves to /articles.html, carrying only
+        # the posts that are not episodes. For a site that is a podcast first
+        # and a blog second, which is a different thing from a blog that
+        # happens to have a podcast.
+        'homepage': str(raw.get('homepage', False)).strip().lower()
+                    in ('true', 'yes', '1', 'on'),
     }
 
 

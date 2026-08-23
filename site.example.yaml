@@ -169,6 +169,13 @@ links:
 #   # change both together if you change either.
 #   # button_color: "#0C7C74"
 #
+#   # Make the show the site's front page. '/' becomes the episode list and the
+#   # written archive moves to /articles.html, carrying only the posts that are
+#   # NOT episodes - for a site that is a podcast first and a blog second, which
+#   # is a different thing from a blog that happens to have a podcast.
+#   # /podcast.html is then not generated at all and 301s to '/'.
+#   # homepage: true
+#
 #   # <podcast:locked> - 'true' (the default) stops a hosting platform importing
 #   # this feed and claiming the show as theirs.
 #   # locked: true
