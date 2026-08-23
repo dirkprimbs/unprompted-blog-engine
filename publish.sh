@@ -285,6 +285,15 @@ ftp_sync() {
 # man-in-the-middle can't present a bogus cert.
 set ftp:ssl-force yes
 set ftp:ssl-protect-data yes
+# List hidden files. FTP's LIST omits dotfiles by default, which means lftp
+# cannot see them, cannot delete them, and cannot remove a directory that only
+# still contains one. Migrating onto this engine is where that bites: the old
+# site's per-directory .htaccess files survive the mirror invisibly, keeping
+# their directories alive - and a leftover .htaccess gives mod_rewrite a fresh
+# per-directory context, so the redirects in our own .htaccess never run for
+# anything underneath it. The symptom is one old URL that stubbornly 404s while
+# every other redirect works.
+set ftp:list-options -a
 mkdir -p "$FTP_REMOTE_DIR"
 cd "$FTP_REMOTE_DIR"
 mirror -R public/ . --delete --verbose

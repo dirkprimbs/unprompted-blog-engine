@@ -167,7 +167,18 @@ def htaccess_content(redirects=()):
         lines = ["\n    # --- From site.yaml's redirects: ---\n"]
         for source, target in redirects:
             escaped = re.escape(source.lstrip('/'))
-            lines.append(f"    RewriteRule ^{escaped} {target} [R=301,L]\n")
+            if target.endswith('/'):
+                # A directory move: carry the rest of the path across, or
+                # /episoden/x.mp3 -> /audio/ would drop the filename and land
+                # every old episode URL on an empty directory. RewriteRule
+                # replaces the whole path, not just the part that matched.
+                lines.append(f"    RewriteRule ^{escaped}(.*)$ {target}$1 "
+                             f"[R=301,L]\n")
+            else:
+                # A single destination: everything under the prefix goes to the
+                # one page, which is what /feed/mp3/index.xml -> /podcast.xml
+                # needs.
+                lines.append(f"    RewriteRule ^{escaped} {target} [R=301,L]\n")
         configured = "".join(lines)
 
     return (
