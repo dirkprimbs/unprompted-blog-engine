@@ -101,9 +101,20 @@ redirect into one rewrite rule instead of a table with a line per episode.
 
 Two snags seen in practice:
 
-- Filenames with spaces or a mangled umlaut (`B%EF%BF%BDcher%20Podcasts.mp3`).
-  Rename those - a broken byte should not live in a URL for a decade - and add an
-  explicit redirect per renamed file, *before* the general directory rule.
+- Filenames with spaces or an umlaut (`B%EF%BF%BDcher%20Podcasts.mp3`,
+  `schla011_elchdämmerung.mp3`). Rename those - a broken byte should not live in
+  a URL for a decade - and add an explicit redirect per renamed file, *before*
+  the general directory rule, which would otherwise forward them to a name that
+  no longer exists.
+
+  **Diff the enclosure basenames against what landed in `content/audio/`** to
+  find them. Both migrations had exactly one such file and neither was obvious;
+  on the second it was found by comparing the two lists, not by reading them.
+
+  The engine writes those redirects to match either encoding, because
+  `%{REQUEST_URI}` is the URI as the client sent it and an umlaut arrives as
+  `%C3%A4` - a rule written with the literal character silently never fires and
+  the request falls through to the general rule instead.
 - An enclosure URL whose file is missing from the snapshot. Match it by
   normalised basename against the directory listing before giving up.
 
@@ -317,7 +328,12 @@ Then:
 - [ ] `podcast.guid` pinned in site.yaml
 - [ ] Tags joined from wp-json
 - [ ] Non-episode posts imported
-- [ ] Audio filenames preserved; renames given their own redirect first
+- [ ] Audio filenames preserved; renames found by diffing the enclosure list
+      against content/audio/, and each given its own redirect first
+- [ ] A real /feed/ directory shipped in public_static/ (the MultiViews trap -
+      it will bite on this host every time)
+- [ ] Every old URL shape simulated against the generated .htaccess BEFORE
+      deploying, not just the ones you remember
 - [ ] Cover art ≥1400px square
 - [ ] Favicon replaced (`.ico`, `.png` **and `.svg`**)
 - [ ] robots.txt written
