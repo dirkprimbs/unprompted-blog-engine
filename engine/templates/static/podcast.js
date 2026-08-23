@@ -27,6 +27,12 @@
         });
     });
 
+    function show(el, visible) {
+        if (!el) return;
+        if (visible) el.removeAttribute('hidden');
+        else el.setAttribute('hidden', '');
+    }
+
     function fmt(seconds) {
         if (!isFinite(seconds)) return '--:--';
         var s = Math.floor(seconds % 60);
@@ -70,8 +76,13 @@
 
         function setPlayingState(playing) {
             play.setAttribute('aria-pressed', playing ? 'true' : 'false');
-            play.querySelector('.icon-play').hidden = playing;
-            play.querySelector('.icon-pause').hidden = !playing;
+            // setAttribute, not `.hidden = `. `hidden` is an IDL attribute of
+            // HTMLElement and these are SVG elements, so assigning the property
+            // sets a meaningless JS expando and never touches the attribute the
+            // stylesheet matches on. The icons then never swap - the button
+            // shows whatever the markup shipped, forever.
+            show(play.querySelector('.icon-play'), !playing);
+            show(play.querySelector('.icon-pause'), playing);
             if (label) {
                 label.textContent = playing ? fmt(audio.currentTime) : (stated || fmt(audio.duration));
             }

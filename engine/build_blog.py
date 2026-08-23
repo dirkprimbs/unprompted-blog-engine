@@ -1819,9 +1819,15 @@ def _theme_overrides_html():
         return ''
     return (
         '<style>'
-        f':root{{--accent:{THEME["accent"]};--accent-fg:{THEME["accent_fg"]};}}'
+        f':root{{--accent:{THEME["accent"]};--accent-fg:{THEME["accent_fg"]};'
+        f'--brand:{THEME["accent"]};--brand-fg:{THEME["accent_fg"]};}}'
         f':root[data-theme="dark"]{{--accent:{THEME["accent_dark"]};'
-        f'--accent-fg:{THEME["accent_dark_fg"]};}}'
+        f'--accent-fg:{THEME["accent_dark_fg"]};'
+        # --brand does NOT lighten. It is the show's colour on a masthead and a
+        # play button, where lightening reads as faded rather than as contrast -
+        # and where it would stop matching the subscribe button, which renders
+        # in an iframe and always gets the brand colour itself.
+        f'--brand:{THEME["accent"]};--brand-fg:{THEME["accent_fg"]};}}'
         '</style>'
     )
 

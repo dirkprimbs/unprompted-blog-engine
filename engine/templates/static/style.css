@@ -22,6 +22,15 @@
     --text-quote: rgba(41, 41, 41, 0.8);
     --accent: #0C7C74;            /* deep teal-green, sampled from the avatar */
     --accent-fg: #FFFFFF;         /* text/icon on an --accent fill */
+    /* Large filled surfaces - the masthead band, the play button, the subscribe
+       pills - use --brand rather than --accent. The two are the same colour
+       here and differ only on a site that sets theme.accent: there --accent is
+       lightened for dark mode so link TEXT stays legible on a near-black page,
+       while a lightened brand colour spread across a masthead just looks faded
+       and stops matching the subscribe button, which cannot be lightened
+       because it lives in an iframe. Fills keep the brand; text gets contrast. */
+    --brand: var(--accent);
+    --brand-fg: var(--accent-fg);
     --bg: #FFFFFF;
     --header-bg: rgba(255, 255, 255, 0.95);
     --border: #F2F2F2;
@@ -91,12 +100,12 @@ header:has(.site-branding) {
    derives from the accent's luminance, so a light brand colour gets dark text
    and a dark one gets white without the author having to decide. */
 .site-branding.on-accent {
-    background: var(--accent);
+    background: var(--brand);
     border-bottom-color: transparent;
 }
 .site-branding.on-accent .site-title,
 .site-branding.on-accent .site-tagline {
-    color: var(--accent-fg);
+    color: var(--brand-fg);
 }
 .site-branding.on-accent .site-tagline {
     /* The muted grey the plain band uses would be unreadable on a saturated
@@ -205,15 +214,15 @@ header:has(.site-branding) .logo { display: none; }
     font-size: 14px;
     padding: 5px 12px;
     border-radius: 999px;
-    background: var(--accent);
-    color: var(--accent-fg) !important;
+    background: var(--brand);
+    color: var(--brand-fg) !important;
     font-weight: 600;
     white-space: nowrap;
     transition: filter 0.2s ease;
 }
 .subscribe-link:hover {
     filter: brightness(1.08);
-    color: var(--accent-fg) !important;
+    color: var(--brand-fg) !important;
 }
 
 /* --- CONFIGURED MENU (site.yaml `nav:`) ---
@@ -1305,13 +1314,13 @@ body:has(.page-panel) .site-footer {
     background: var(--surface-hover);
 }
 .podcast-subscribe a.is-feed {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-fg);
+    background: var(--brand);
+    border-color: var(--brand);
+    color: var(--brand-fg);
 }
 .podcast-subscribe a.is-feed:hover {
-    background: var(--accent);
-    color: var(--accent-fg);
+    background: var(--brand);
+    color: var(--brand-fg);
     filter: brightness(1.08);
 }
 
@@ -1467,8 +1476,8 @@ body:has(.page-panel) .site-footer {
     padding: 12px 24px 12px 20px;
     border: 0;
     border-radius: 999px;
-    background: var(--accent);
-    color: var(--accent-fg);
+    background: var(--brand);
+    color: var(--brand-fg);
     font-family: "Plus Jakarta Sans", sans-serif;
     font-size: 16px;
     font-weight: 700;
@@ -1528,7 +1537,7 @@ body:has(.page-panel) .site-footer {
     height: 6px;
     width: 0;
     border-radius: 3px;
-    background: var(--accent);
+    background: var(--brand);
 }
 /* A thumb, so the bar reads as something you can grab rather than as a read-out.
    It sits at the end of the filled portion and only appears once there is a
@@ -1542,7 +1551,7 @@ body:has(.page-panel) .site-footer {
     height: 13px;
     margin-right: -6px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--brand);
     transform: translateY(-50%) scale(0);
     transition: transform 0.12s ease;
 }
