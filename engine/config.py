@@ -380,6 +380,12 @@ def _podcast():
         'title': _need('title'),
         'subtitle': _opt('subtitle'),
         'description': _need('description'),
+        # <itunes:summary>, the longer blurb Apple shows under the short one.
+        # Optional and defaulting to the description, because most shows have
+        # only one - but a migrated feed usually has both, and the point of
+        # having the slot is that the show's own words go in it rather than
+        # being condensed into one field by whoever does the import.
+        'summary': _opt('summary') or _need('description'),
         'cover': cover,
         'category': category,
         'subcategory': _opt('subcategory'),

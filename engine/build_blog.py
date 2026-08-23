@@ -2168,6 +2168,7 @@ def podcast_feed_xml(episodes, last_build_date_rfc):
     <title>{esc_attr(cfg['title'])}</title>
     <link>{SITE_URL}{podcast_href()}</link>
     <description>{esc_attr(cfg['description'])}</description>
+    <itunes:summary>{esc_attr(cfg['summary'])}</itunes:summary>
     <language>{esc_attr(cfg['language'])}</language>
     <lastBuildDate>{last_build_date_rfc}</lastBuildDate>
     <generator>Unprompted Blog Engine</generator>
