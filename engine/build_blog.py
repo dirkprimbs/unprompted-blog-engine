@@ -1593,7 +1593,12 @@ def build_podcast_page(base_template, episodes, sitemap_urls):
         f'<h1>{esc(cfg["title"])}</h1>'
         + (f'<p class="podcast-strapline">{esc(cfg["subtitle"])}</p>'
            if cfg['subtitle'] else '')
-        + f'<p>{esc(cfg["description"])}</p>'
+        # The longer blurb, not the description: on most shows the description
+        # and the subtitle are the same sentence, so printing the description
+        # here says it twice. summary defaults to description, so a show with
+        # only one text is unaffected.
+        + (f'<p>{esc(cfg["summary"])}</p>'
+           if cfg['summary'] != cfg['subtitle'] else '')
         '<div class="podcast-subscribe">'
         f'<a class="is-feed" href="{esc(podcast_feed_href())}">RSS feed</a>'
         f'{pills}'
