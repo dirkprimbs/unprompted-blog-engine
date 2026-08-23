@@ -1222,6 +1222,13 @@ def parse_markdown_file(filepath, valid_slugs=None):
             path = candidate.strip().split(' ')[0]
             if path.startswith('assets/') and path not in hosted:
                 hosted.append(path)
+    # An episode's own artwork is named in frontmatter, not in the body, so
+    # nothing above sees it. On most shows it slips through anyway because the
+    # same picture also appears in the shownotes - which is exactly the kind of
+    # coincidence that hides a bug until the one episode that does not do that.
+    artwork = str(frontmatter.get('image') or '').strip().lstrip('/')
+    if artwork.startswith('assets/') and artwork not in hosted:
+        hosted.append(artwork)
     for local_path in hosted:
         src_disk = os.path.join(CONTENT_DIR, local_path)
         if os.path.exists(src_disk):
