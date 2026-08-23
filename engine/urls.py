@@ -155,6 +155,30 @@ def sitemap_loc(url):
     return escape(rebuilt, quote=False)
 
 
+def _uri_pattern(path):
+    """A regex matching `path` against %{REQUEST_URI}, in either encoding.
+
+    %{REQUEST_URI} is the URI as the client sent it, so a path containing an
+    umlaut arrives percent-encoded - `schla011_elchd%C3%A4mmerung.mp3`, not
+    `schla011_elchdämmerung.mp3`. A rule written with the literal character
+    therefore never matches, and the failure is silent: the request falls
+    through to whatever more general rule follows, which sends it somewhere
+    almost right.
+
+    Every non-ASCII character becomes an alternation of both forms, so the rule
+    works whichever way the client spells it - and old links in the wild spell
+    it both ways.
+    """
+    out = []
+    for char in path:
+        if ord(char) < 128:
+            out.append(re.escape(char))
+        else:
+            encoded = ''.join(f'%{byte:02X}' for byte in char.encode('utf-8'))
+            out.append(f'(?:{re.escape(char)}|{encoded})')
+    return ''.join(out)
+
+
 def htaccess_content(redirects=()):
     """The generated public/.htaccess: legacy-URL redirects plus text
     compression and cache headers. Every block is wrapped in an <IfModule> guard
@@ -196,7 +220,7 @@ def htaccess_content(redirects=()):
         # exactly what a feed redirect is made of. REQUEST_URI is the original
         # request and negotiation cannot have touched it.
         for source, target in redirects:
-            escaped = re.escape('/' + source.lstrip('/'))
+            escaped = _uri_pattern('/' + source.lstrip('/'))
             # '/' is a destination, not a directory move: appending the
             # remainder there would turn /podcast.htmlfoo into /foo.
             if target.endswith('/') and target != '/':
