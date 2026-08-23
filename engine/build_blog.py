@@ -1599,7 +1599,9 @@ def build_podcast_page(base_template, episodes, sitemap_urls):
         # only one text is unaffected.
         + (f'<p>{esc(cfg["summary"])}</p>'
            if cfg['summary'] != cfg['subtitle'] else '')
-        '<div class="podcast-subscribe">'
+        # Explicit '+': the line above is a conditional expression, not a string
+        # literal, so the next literal no longer concatenates implicitly.
+        + '<div class="podcast-subscribe">'
         f'<a class="is-feed" href="{esc(podcast_feed_href())}">RSS feed</a>'
         f'{pills}'
         '</div>'
