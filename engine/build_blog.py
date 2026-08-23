@@ -1406,6 +1406,23 @@ def podcast_is_home():
     return bool(PODCAST_ENABLED and PODCAST.get('homepage'))
 
 
+def _button_colour():
+    """What colour the subscribe button should be.
+
+    The button lives in an iframe and cannot see --accent, so it is the one
+    place the site's colour has to be restated. The order is: whatever
+    podcast.button_color says, else the site's own theme accent, else the
+    engine's. Following theme.accent by default is the point - a site that set
+    its brand colour once should not find the one control it most wants people
+    to press still wearing the engine's.
+    """
+    if PODCAST and PODCAST.get('button_color'):
+        return PODCAST['button_color']
+    if THEME:
+        return THEME['accent']
+    return '#0C7C74'
+
+
 def _podlove_button_html(hidden=False):
     """The vendored Podlove subscribe button, configured inline.
 
@@ -1453,7 +1470,7 @@ def _podlove_button_html(hidden=False):
         f'src="/subscribe-button/javascripts/app.js" '
         f'data-json-data="podcastData" data-language="{esc(PODCAST["language"][:2])}" '
         f'data-size="big" data-style="filled" data-format="rectangle" '
-        f'data-color="{esc(cfg["button_color"])}"'
+        f'data-color="{esc(_button_colour())}"'
         + (f' data-hide="true" data-buttonid="{_SUBSCRIBE_BUTTON_ID}"'
            if hidden else '')
         + '></script>'

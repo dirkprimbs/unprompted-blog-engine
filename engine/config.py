@@ -403,12 +403,13 @@ def _podcast():
         'locked': str(raw.get('locked', True)).strip().lower()
                   in ('true', 'yes', '1', 'on'),
         'links': {str(k): str(v) for k, v in links.items() if v},
-        # Fill colour for the Podlove subscribe button, which renders inside an
-        # iframe and so cannot read the theme's CSS custom properties. The
-        # default is the engine's own --accent; if you changed that in
-        # style.css, set this to the same value or the button will be the one
-        # element on the page in the old colour.
-        'button_color': _opt('button_color') or '#0C7C74',
+        # Fill colour for the Podlove subscribe button. It renders inside an
+        # iframe and so cannot read the theme's custom properties - it has to be
+        # told. Left empty here and resolved at render time against theme.accent
+        # (see _podlove_button_html), because THEME is built after this and
+        # because the answer should follow the site's colour without being
+        # repeated in two places.
+        'button_color': _opt('button_color'),
         # <podcast:guid> is normally derived from the feed URL, but the spec is
         # explicit that it must NOT change if the feed later moves - so a show
         # migrating here has to keep the one its old feed published, or the
