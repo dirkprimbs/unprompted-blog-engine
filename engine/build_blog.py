@@ -40,7 +40,7 @@ from config import (
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, STATIC_SOURCE_DIRS,
     PUBLIC_DIR, PUBLIC_ASSETS_DIR,
-    PODCAST_ONLY_ASSETS,
+    PODCAST_ONLY_ASSETS, SITE_STATIC_DIR,
     CONTENT_DIR, CONTENT_ASSETS_DIR, CONTENT_AUDIO_DIR, PUBLIC_AUDIO_DIR,
     PAGES_DIR,
     LINK_MANIFEST_PATH, EXISTING_TAGS_PATH, COMMENT_MODERATION_PATH,
@@ -793,6 +793,24 @@ def _optimize_content_asset(disk_path):
 _HTML_IMG_RE = re.compile(r'<img\b[^>]*>', re.IGNORECASE)
 
 
+def _asset_on_disk(src):
+    """The file behind an 'assets/x.jpg' or '/assets/x.jpg' reference, or None.
+
+    Both spellings and both homes: posts point at content/assets/ with a
+    content-relative path, while a standalone page points at public_static/
+    with a root-absolute one, because pages are hand-written and the build does
+    not manage their files.
+    """
+    name = src.lstrip('/')
+    if not name.startswith('assets/'):
+        return None
+    for base in (CONTENT_DIR, SITE_STATIC_DIR):
+        candidate = os.path.join(base, name)
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
 def _caption_html_images(text, filename, can_caption):
     """Give raw HTML <img> tags the same alt text treatment Markdown images get.
 
@@ -818,13 +836,13 @@ def _caption_html_images(text, filename, can_caption):
     last = 0
     for match in _HTML_IMG_RE.finditer(text):
         tag = match.group(0)
-        src = re.search(r'\bsrc="(assets/[^"]+)"', tag)
+        src = re.search(r'\bsrc="(/?assets/[^"]+)"', tag)
         alt = re.search(r'\balt="([^"]*)"', tag)
         if not src or (alt and alt.group(1).strip()):
             continue
 
-        disk = os.path.join(CONTENT_DIR, src.group(1))
-        if not os.path.exists(disk):
+        disk = _asset_on_disk(src.group(1))
+        if not disk:
             continue
         try:
             with open(disk, 'rb') as fh:
@@ -1055,6 +1073,34 @@ def process_content_media():
                 text = text.replace(old, new, 1)
             write_file_if_changed(filepath, text)
             print(f"   ✍️  Updated media references in {filename}")
+
+    caption_page_images(can_caption)
+
+
+def caption_page_images(can_caption):
+    """Alt text for images in content_pipeline/pages/*.md.
+
+    Standalone pages are otherwise outside the media pipeline on purpose: they
+    are hand-written, and their images are the author's own files in
+    public_static/ rather than something the build hosts and rewrites.
+
+    Captioning is the one exception, because the reason for the rule does not
+    apply to it. Nothing here copies, converts or renames a file - it fills in
+    an empty alt attribute. And an undescribed image is not a stylistic choice
+    the author made about their own page; it is the field nobody fills in.
+    """
+    if not os.path.isdir(PAGES_DIR) or not can_caption:
+        return
+    for filename in sorted(os.listdir(PAGES_DIR)):
+        if not filename.endswith('.md'):
+            continue
+        path = os.path.join(PAGES_DIR, filename)
+        with open(path, 'r', encoding='utf-8') as fh:
+            text = fh.read()
+        text, changed = _caption_html_images(text, filename, can_caption)
+        if changed:
+            write_file_if_changed(path, text)
+            print(f"   ✍️  Updated alt text in pages/{filename}")
 
 
 def parse_markdown_file(filepath, valid_slugs=None):
