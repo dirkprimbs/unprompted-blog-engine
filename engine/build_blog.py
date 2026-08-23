@@ -22,7 +22,7 @@ from urls import (
     PODCAST_FEED_NAME, PODCAST_PAGE_NAME, ARCHIVE_PAGE_NAME,
     post_href, tag_page_name, tag_href, tag_feed_name, tag_feed_href, home_href,
     audio_href, podcast_feed_href, podcast_href, archive_href,
-    slugify_tag, slug_for, read_slug, htaccess_content,
+    slugify_tag, slug_for, read_slug, htaccess_content, sitemap_loc,
 )
 # Filesystem layout. Note the split: urls.py above supplies URL space (including
 # POSTS_DIR/TAGS_DIR/FEEDS_DIR, which double as public/ subdirectory names),
@@ -2372,7 +2372,8 @@ def build_site():
     # exactly as pages/index.md wins over the generated homepage.
     render_standalone_pages(base_template, sitemap_urls)
 
-    sitemap_entries = "".join([f"<url><loc>{url}</loc></url>" for url in sitemap_urls])
+    sitemap_entries = "".join([f"<url><loc>{sitemap_loc(url)}</loc></url>"
+                               for url in sitemap_urls])
     sitemap_xml = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{sitemap_entries}</urlset>'
     # FIXED: Utilizing smart compilation writer
     write_file_if_changed(os.path.join(PUBLIC_DIR, "sitemap.xml"), sitemap_xml)

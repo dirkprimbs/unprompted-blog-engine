@@ -5,6 +5,8 @@ feed, and sitemap entry) and announce.py (for the tooted post URL). Change the
 layout here and every consumer follows."""
 
 import re
+from html import escape
+from urllib.parse import quote, urlsplit, urlunsplit
 import yaml
 
 # The site's base URL is configuration, not code - it lives in site.yaml (see
@@ -136,6 +138,22 @@ def read_slug(filepath, filename):
         return slug_for(filename, fm)
     except Exception:
         return filename.replace('.md', '.html')
+
+def sitemap_loc(url):
+    """A URL as a <loc> may carry it: percent-encoded, then XML-escaped.
+
+    Tag slugs keep their umlauts on purpose - see slugify_tag - so a German
+    site has URLs like /tags/hören.html. Browsers encode those on the way out
+    and the server serves them either way, but the sitemaps protocol requires
+    the entry itself to be escaped, and a sitemap that is merely tolerated by
+    one crawler is not a sitemap you want to rely on.
+    """
+    parts = urlsplit(url)
+    path = quote(parts.path, safe="/-._~!$&'()*+,;=:@")
+    rebuilt = urlunsplit((parts.scheme, parts.netloc, path, parts.query,
+                          parts.fragment))
+    return escape(rebuilt, quote=False)
+
 
 def htaccess_content(redirects=()):
     """The generated public/.htaccess: legacy-URL redirects plus text
