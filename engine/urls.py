@@ -179,7 +179,9 @@ def htaccess_content(redirects=()):
         # request and negotiation cannot have touched it.
         for source, target in redirects:
             escaped = re.escape('/' + source.lstrip('/'))
-            if target.endswith('/'):
+            # '/' is a destination, not a directory move: appending the
+            # remainder there would turn /podcast.htmlfoo into /foo.
+            if target.endswith('/') and target != '/':
                 # A directory move: carry the rest of the path across, or
                 # /episoden/x.mp3 -> /audio/ would drop the filename and land
                 # every old episode URL on an empty directory. The remainder is
