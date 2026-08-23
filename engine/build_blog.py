@@ -1036,6 +1036,11 @@ def parse_markdown_file(filepath, valid_slugs=None):
     hosted = re.findall(r'!\[.*?\]\(\s*(assets/[^)\s"]+)', markdown_text)
     hosted += [p for p in re.findall(r'src="(assets/[^"]+)"', markdown_text)
                if p not in hosted]
+    for attr in re.findall(r'srcset="([^"]*)"', markdown_text):
+        for candidate in attr.split(','):
+            path = candidate.strip().split(' ')[0]
+            if path.startswith('assets/') and path not in hosted:
+                hosted.append(path)
     for local_path in hosted:
         src_disk = os.path.join(CONTENT_DIR, local_path)
         if os.path.exists(src_disk):
@@ -1154,8 +1159,26 @@ def _absolutize_body(html_body, valid_slugs):
     # order; _enhance_images accepts either form of the path.
     html_body = _enhance_images(html_body)
 
-    # Images live at /assets/ regardless of the page's depth.
+    # Images live at /assets/ regardless of the page's depth. Posts are served
+    # from /posts/, so a relative 'assets/x.jpg' would resolve to
+    # /posts/assets/x.jpg and 404.
     html_body = re.sub(r'src="assets/', 'src="/assets/', html_body)
+
+    # srcset needs the same treatment, and is easy to forget because the image
+    # still appears to have a correct src: the browser picks a candidate from
+    # srcset when one matches, so a rewritten src with an un-rewritten srcset
+    # renders as a broken image anyway. Imported WordPress content is full of
+    # srcset, which is where this showed up.
+    def _fix_srcset(match):
+        candidates = []
+        for candidate in match.group(1).split(','):
+            candidate = candidate.strip()
+            if candidate.startswith('assets/'):
+                candidate = '/' + candidate
+            candidates.append(candidate)
+        return 'srcset="' + ', '.join(candidates) + '"'
+
+    html_body = re.sub(r'srcset="([^"]*)"', _fix_srcset, html_body)
 
     # Bare '<slug>.html' backlinks -> '/posts/<slug>.html' (known slugs only).
     def _fix_link(m):
