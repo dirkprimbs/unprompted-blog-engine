@@ -1028,7 +1028,14 @@ def parse_markdown_file(filepath, valid_slugs=None):
     # Here we only make sure those hosted assets are present in public/ for the
     # compiled site (defensive - process_content_media already copies them), and
     # we remember the first one as this post's social-card image (og:image).
+    # Both spellings, because Markdown allows raw HTML and imported content is
+    # full of it. _absolutize_body() rewrites src="assets/..." on any tag, so
+    # matching only the Markdown form here produced pages whose <img> URLs were
+    # correct and whose files had never been copied - a 404 that looks like a
+    # broken path rather than a missing build step.
     hosted = re.findall(r'!\[.*?\]\(\s*(assets/[^)\s"]+)', markdown_text)
+    hosted += [p for p in re.findall(r'src="(assets/[^"]+)"', markdown_text)
+               if p not in hosted]
     for local_path in hosted:
         src_disk = os.path.join(CONTENT_DIR, local_path)
         if os.path.exists(src_disk):
