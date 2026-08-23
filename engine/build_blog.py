@@ -35,7 +35,7 @@ from config import (
     PAGE_SIZE, FEED_ITEMS, VISIBLE_TAGS, WORDS_PER_MINUTE, TAG_EMOJI,
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
     PODCAST, PODCAST_ENABLED, REDIRECTS, ARCHIVE_HEADING,
-    SITE_LANGUAGE,
+    SITE_LANGUAGE, THEME,
 )
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, STATIC_SOURCE_DIRS,
@@ -1786,6 +1786,29 @@ def _social_link_html(url, label):
     return f'<a href="{esc(url)}" target="_blank" rel="me noopener">{label}</a>'
 
 
+def _theme_overrides_html():
+    """The site's brand colour as a <style> block, or '' when unset.
+
+    Both themes are set, because --accent is defined twice in style.css - once
+    on :root and again under :root[data-theme="dark"] - and overriding only the
+    first would leave dark mode showing the engine's teal.
+
+    --accent-fg travels with it. The theme uses the accent as a fill with text
+    on top, so the two cannot be chosen independently: an author who picks a
+    colour should not also have to work out whether their own button needs
+    white or black text.
+    """
+    if not THEME:
+        return ''
+    return (
+        '<style>'
+        f':root{{--accent:{THEME["accent"]};--accent-fg:{THEME["accent_fg"]};}}'
+        f':root[data-theme="dark"]{{--accent:{THEME["accent_dark"]};'
+        f'--accent-fg:{THEME["accent_dark_fg"]};}}'
+        '</style>'
+    )
+
+
 def _site_branding_html():
     """The header's branding band: the site name set large with its tagline
     underneath, above the nav row.
@@ -1799,8 +1822,9 @@ def _site_branding_html():
     see the `header` rules in style.css."""
     if not SITE_TAGLINE:
         return ''
+    variant = ' on-accent' if (THEME and THEME['masthead'] == 'accent') else ''
     return (
-        '<div class="site-branding"><div class="branding-wrap">'
+        f'<div class="site-branding{variant}"><div class="branding-wrap">'
         f'<a href="/" class="site-title">{esc(SITE_NAME)}</a>'
         f'<p class="site-tagline">{esc(SITE_TAGLINE)}</p>'
         '</div></div>'
@@ -1831,6 +1855,7 @@ def safe_render(template, mappings):
     # element by element, since these are the one place author text becomes
     # markup rather than an attribute value.
     mappings.setdefault("%SITE_LANG%", esc(SITE_LANGUAGE))
+    mappings.setdefault("%THEME_OVERRIDES%", _theme_overrides_html())
     mappings.setdefault("%HEADER_NAV%", _header_nav_html())
     mappings.setdefault("%SUBSCRIBE_ITEM%", _subscribe_item_html())
     mappings.setdefault("%SITE_BRANDING%", _site_branding_html())

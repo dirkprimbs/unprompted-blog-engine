@@ -22,6 +22,7 @@ page render with an empty title or the word "None" in a meta tag.
 """
 
 import os
+import re
 import sys
 
 import yaml
@@ -484,6 +485,87 @@ REDIRECTS = _redirects()
 ARCHIVE_HEADING = str((_cfg.get('display') or {}).get('archive_heading')
                       or '').strip()
 
+
+
+# --- Theme (wholly optional) -------------------------------------------------
+
+def _hex_colour(value, where):
+    """A #rgb or #rrggbb string, normalised to #rrggbb."""
+    text = str(value).strip()
+    if not re.fullmatch(r'#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})', text):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': {where} must be a hex colour like "
+              f"'#C8482B' (got {value!r}).")
+    if len(text) == 4:
+        text = '#' + ''.join(c * 2 for c in text[1:])
+    return text.upper()
+
+
+def _lighten(hex_colour, amount=0.35):
+    """Mix a colour towards white. Used to derive a dark-mode accent when the
+    author gave only one: the theme uses --accent as a fill with contrasting
+    text on it, and a colour chosen against a white page is usually too dark to
+    carry that on a near-black one."""
+    r, g, b = (int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
+    mix = lambda c: round(c + (255 - c) * amount)
+    return f"#{mix(r):02X}{mix(g):02X}{mix(b):02X}"
+
+
+def contrasting_ink(hex_colour):
+    """Black or white, whichever is readable on this colour.
+
+    Derived rather than configured. An author picking a brand colour should not
+    also have to work out whether their own button needs white or black text -
+    and getting it wrong is the difference between a legible control and an
+    unreadable one. Relative luminance per WCAG, with the usual 0.5 cut.
+    """
+    def channel(value):
+        value /= 255
+        return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+    r, g, b = (int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
+    luminance = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+    return '#181818' if luminance > 0.45 else '#FFFFFF'
+
+
+def _theme():
+    """The `theme:` section: this site's brand colour, and how the masthead
+    wears it.
+
+    Absent is the normal case and means the engine's own palette. Present, it
+    overrides two custom properties and optionally paints the branding band -
+    which is as far as this goes on purpose. A site that wants a different
+    layout wants a different stylesheet, not thirty more config keys; a site
+    migrating a show that has had one colour for years just wants that colour.
+    """
+    raw = _cfg.get('theme')
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': theme must be a mapping of settings "
+              f"(got {type(raw).__name__}).")
+
+    accent = raw.get('accent')
+    if not accent:
+        _fail(f"❌ '{SITE_CONFIG_PATH}': theme.accent is required once a theme: "
+              f"section exists. Remove the section to use the engine's palette.")
+    accent = _hex_colour(accent, 'theme.accent')
+    accent_dark = (_hex_colour(raw['accent_dark'], 'theme.accent_dark')
+                   if raw.get('accent_dark') else _lighten(accent))
+
+    masthead = str(raw.get('masthead') or 'plain').strip().lower()
+    if masthead not in ('plain', 'accent'):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': theme.masthead must be 'plain' or "
+              f"'accent' (got {masthead!r}).")
+
+    return {
+        'accent': accent,
+        'accent_fg': contrasting_ink(accent),
+        'accent_dark': accent_dark,
+        'accent_dark_fg': contrasting_ink(accent_dark),
+        'masthead': masthead,
+    }
+
+
+THEME = _theme()
 
 # --- Images (all optional; see engine/images.py for what they gate) ---
 # max_width 0 means "never downscale" - conversion still applies.

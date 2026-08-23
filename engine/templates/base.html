@@ -43,6 +43,12 @@
     <!-- Site styles live in one file so a tweak re-uploads only style.css, not
          every page. See static/style.css. -->
     <link rel="stylesheet" href="/style.css?v=%ASSET_V%">
+    <!-- This site's brand colour, when site.yaml sets one. Deliberately after
+         style.css and deliberately inline: it is two custom properties, it
+         changes when the config does rather than when the theme does, and a
+         separate file would be a second request for eighty bytes. Empty when
+         no theme: section exists. See _theme_overrides_html(). -->
+    %THEME_OVERRIDES%
 
     <!-- Resolve the reader's theme BEFORE first paint to avoid a flash. Reads
          their saved choice (localStorage, on-device only - not a cookie, never

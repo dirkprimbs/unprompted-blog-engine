@@ -86,6 +86,24 @@ header:has(.site-branding) {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
 }
+/* theme.masthead: accent - the band wears the site's brand colour instead of
+   the page surface. Everything in it flips to --accent-fg, which config.py
+   derives from the accent's luminance, so a light brand colour gets dark text
+   and a dark one gets white without the author having to decide. */
+.site-branding.on-accent {
+    background: var(--accent);
+    border-bottom-color: transparent;
+}
+.site-branding.on-accent .site-title,
+.site-branding.on-accent .site-tagline {
+    color: var(--accent-fg);
+}
+.site-branding.on-accent .site-tagline {
+    /* The muted grey the plain band uses would be unreadable on a saturated
+       fill, so the tagline stays the same ink and steps back with opacity. */
+    opacity: 0.85;
+}
+
 .branding-wrap {
     max-width: 1000px;
     margin: 0 auto;
