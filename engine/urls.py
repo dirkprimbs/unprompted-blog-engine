@@ -155,6 +155,15 @@ def sitemap_loc(url):
     return escape(rebuilt, quote=False)
 
 
+# What a URI may carry literally in a path: RFC 3986's unreserved and
+# sub-delims, plus ':' '@' and the separator itself. Anything outside this set
+# reaches the server percent-encoded.
+_URI_SAFE = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "-._~!$&'()*+,;=:@/"
+)
+
+
 def _uri_pattern(path):
     """A regex matching `path` against %{REQUEST_URI}, in either encoding.
 
@@ -165,13 +174,16 @@ def _uri_pattern(path):
     through to whatever more general rule follows, which sends it somewhere
     almost right.
 
-    Every non-ASCII character becomes an alternation of both forms, so the rule
-    works whichever way the client spells it - and old links in the wild spell
-    it both ways.
+    **A space does this too, and it is the likelier case.** `wrap up.mp3`
+    arrives as `wrap%20up.mp3`, and a space is ASCII - so testing for non-ASCII
+    was not enough, and the one file that needed rescuing was the one the rule
+    missed. Every character that is not URI-safe becomes an alternation of both
+    forms, whatever its codepoint, so the rule works whichever way the client
+    spells it - and old links in the wild spell it both ways.
     """
     out = []
     for char in path:
-        if ord(char) < 128:
+        if char in _URI_SAFE:
             out.append(re.escape(char))
         else:
             encoded = ''.join(f'%{byte:02X}' for byte in char.encode('utf-8'))
