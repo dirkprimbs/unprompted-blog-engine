@@ -213,6 +213,44 @@ site down to fix a redirect is a bad trade.
 
 ---
 
+## 5b. Strip plugin scaffolding back to bare links
+
+**A WordPress export contains plugin output that looks like content.** Carrying
+the shownote HTML across verbatim preserves the old site's *workarounds* and
+throws away the mechanism the engine would use instead.
+
+The one that bit here was wp-youtube-lyte. Every trailer in the export looks
+like this:
+
+```html
+<figure class="wp-block-embed-youtube ...">
+  <a href="https://oldsite/episode-slug/">
+    <img src="/wp-content/plugins/wp-youtube-lyte/...-hqdefault.jpg">
+  </a>
+</figure>
+```
+
+That is a *picture of a video* linking to a page. There is no YouTube URL in it
+at all, so `embed_youtube()` never fires and the reader gets a static thumbnail
+that goes nowhere useful. The import even helpfully copies the cached
+thumbnails into `assets/`, which makes the result look deliberate.
+
+**Reduce every embed to its bare link on its own line** and let the engine
+re-derive the embedding - that is what produces a click-to-play facade with a
+self-hosted thumbnail and no request to Google until someone clicks.
+
+Grep the export before importing, not after:
+
+```
+wp-youtube-lyte | wp-block-embed | lyte-  | -hqdefault.jpg
+wp-block-embed-twitter | wp-block-embed-vimeo | instagram-media | twitter-tweet
+```
+
+Same family as the emoji `<img>` tags WordPress serves from `s.w.org` - both are
+the old site rendering something the engine renders itself. The emoji ones are
+easy to spot because they are obviously wrong; the embeds are not, because they
+look right until you click them.
+
 ## 6. Images and other leftovers
 
 - Shownote images hosted at `/wp-content/uploads/` must be copied into
@@ -369,6 +407,8 @@ Then:
 - [ ] `podcast.guid` pinned in site.yaml
 - [ ] Tags joined from wp-json
 - [ ] Non-episode posts imported
+- [ ] Plugin embed scaffolding stripped back to bare links (wp-youtube-lyte and
+      friends) - a static thumbnail linking to a page looks fine and plays nothing
 - [ ] Per-episode `<itunes:image>` checked: one shared image is droppable,
       distinct ones are not
 - [ ] Audio filenames preserved; renames found by diffing the enclosure list
