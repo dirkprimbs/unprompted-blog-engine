@@ -251,6 +251,57 @@ the old site rendering something the engine renders itself. The emoji ones are
 easy to spot because they are obviously wrong; the embeds are not, because they
 look right until you click them.
 
+## 5c. The other things a WordPress export smuggles in
+
+5b is about markup that stands in for a mechanism. This is the rest: markup that
+is simply broken, or that quietly keeps pointing at the host you are leaving.
+All of it looks fine in a browser, which is why none of it turns up until you
+grep for it.
+
+**Anchors that lost their `href`.** The block editor drops the attribute name
+when the editing session expires mid-paste, and writes the link it was bounced
+to instead:
+
+```html
+<a "https://oldsite/buch" target="_blank">30x Fotogeschichte(n)</a>
+<a rel="noreferrer noopener" "https://oldsite/wp-login.php?redirect_to=..." >Morse Camera</a>
+```
+
+Ninety-one of these in one export - ninety of them the same book promo, pasted
+once into a template and repeated on every episode since. They render as plain
+text, so nobody ever noticed. Repair the ones whose target is obvious, unwrap
+the ones whose target is gone. Grep: `<a[^>]*\s"https\?://`.
+
+**Block-editor bookkeeping.** Every link the editor made carries `type="URL"`
+and `id="<the same URL again>"`; every image carries `srcset`, `sizes` and
+assorted `data-*`. Strip all of it. `srcset` is the one that matters: it lists
+width variants **on the old host**, and a browser prefers it over `src` - so an
+image whose `src` you carefully rewrote still loads from the domain you are
+leaving. It is invisible in a page that looks correct.
+
+**Third-party iframes in shownotes.** Amazon's Kindle preview card
+(`lesen.amazon.de/kp/card`) was the one here, 63 of them. Same reasoning as the
+YouTube facade: an iframe hands every visitor to a third party on page load,
+for a book they did not ask about. The card carries everything needed to replace
+it - the title in the iframe's `title` attribute, the ASIN in its `src` - so it
+becomes `https://www.amazon.de/dp/<ASIN>` under the book's own name. Drop the
+`tag=kpembed-20` parameter; that is Amazon's embed tracking, not the author's.
+
+**Tag archives.** WordPress transliterates an umlaut into a slug and this engine
+does not, so `/tag/portrat/` and `/tags/porträt.html` are the same tag spelled
+two ways - `redirects:` cannot bridge them, and it takes prefixes rather than
+patterns anyway. Build the map from the export's own `wp-json/wp/v2/tags`
+name→slug pairs and rewrite the links at import time, so the two never have to
+agree on an algorithm. Inbound `/tag/` links from outside stay lost; say so
+rather than assuming nobody had any.
+
+**Off-site redirects need their own directory.** `redirects:` in site.yaml takes
+root-absolute paths on both sides by design, so a vanity path that leaves the
+site (`/buch` → a publisher) cannot go in it. Ship a real
+`public_static/buch/.htaccess` instead. A real directory is also what keeps
+MultiViews from resolving the path against some other file - the same trap
+`/feed/` falls into.
+
 ## 6. Images and other leftovers
 
 - Shownote images hosted at `/wp-content/uploads/` must be copied into
@@ -270,6 +321,13 @@ look right until you click them.
   `/wp-sitemap.xml`; the engine writes no robots.txt of its own.
 - An embedded Podlove subscribe button in old shownotes can simply be repointed
   at `/subscribe-button/javascripts/app.js` - the engine vendors the same widget.
+- **Re-read the privacy page before copying it from the last migration.** Its
+  strongest sentence is that the site embeds nothing from foreign servers, and
+  that sentence is a claim about *this* export. A show whose shownotes hotlink
+  photographs from Wikimedia, the Library of Congress or a museum makes it false
+  on the pages that do - as does one whose episodes embed video, even behind a
+  facade. Name the exceptions in the text; the alternative is a legal page that
+  is wrong, which is worse than one that is long.
 
 ---
 

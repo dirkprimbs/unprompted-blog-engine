@@ -2584,6 +2584,15 @@ def build_site():
     total_posts = len(archive_posts)
     total_home_pages = max(1, (total_posts + PAGE_SIZE - 1) // PAGE_SIZE)
 
+    # A podcast-first site with nothing but episodes has no archive to show, and
+    # the loop below would still write one: a page reading "No stories found",
+    # in the engine's English rather than the site's language, linked from
+    # nowhere and listed in the sitemap for a search engine to go and index. Not
+    # publishing it is the honest version of an empty archive - and the moment a
+    # written post appears, the page comes back on its own.
+    if at_home and not archive_posts:
+        total_home_pages = 0
+
     for page_idx in range(total_home_pages):
         current_page_num = page_idx + 1
         start_sub = page_idx * PAGE_SIZE
