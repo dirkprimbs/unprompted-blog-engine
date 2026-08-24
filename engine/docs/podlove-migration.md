@@ -299,6 +299,31 @@ Audit before deploying:
 
 ---
 
+## 6b. Publishing a new episode afterwards
+
+Write `content_pipeline/content/YYYY-MM-DD_Titel.md` with `title`, `slug`,
+`date`, `summary` and `episode_number`, put the audio link alone on its own
+line, and build. The engine copies the audio, mints the GUID, reads the
+duration and adds it to the feed.
+
+**The trap is copying the previous episode's file as a template.** That is the
+obvious way to start one, and it carries two fields that must not be reused:
+
+- `guid:` - delete the line. Two episodes sharing a GUID means apps treat the
+  new one as a re-publication of the old: most ignore it entirely, some replace
+  the old episode's metadata with the new one's. Either way the new episode does
+  not reach subscribers, and the feed looks fine while it happens.
+- `episode_number:` - increment it, or two episodes claim the same number.
+
+Seen in the wild within a day of a migration going live, on exactly the file
+that was copied. Check before deploying:
+
+```python
+# unique GUIDs == item count, and no episode_number appears twice
+```
+
+---
+
 ## 7. Deploy
 
 - **Check `FTP_REMOTE_DIR` before the first deploy.** `lftp mirror --delete`
@@ -364,3 +389,5 @@ Then:
 - [ ] No `announce: pending` anywhere
 - [ ] FTP target confirmed before the first `--deploy`
 - [ ] Old feed vs new: GUIDs, pubDates, enclosure lengths all match
+- [ ] No duplicate GUIDs and no duplicate episode numbers in the finished feed -
+      check this on every later publish too, not only at migration
