@@ -346,6 +346,34 @@ def _episode_artwork(episode_or_meta):
     return '/' + src.lstrip('/')
 
 
+def _card_image(meta):
+    """The absolute URL of a post's social-card image, or None for none.
+
+    Three sources in order - an image in the post's own body, an episode's
+    frontmatter artwork, then the show cover - and three URL shapes to
+    reconcile: 'first_image' is site-root-relative with no leading slash,
+    _episode_artwork() returns root-absolute, and either may already be a remote
+    URL that has to pass through untouched.
+
+    The fallback is deliberately episodes-only. A written post with no picture
+    has nothing of its own to put on a card and still gets none, which is the
+    behaviour that was here before. An episode always has at least the artwork
+    of the show it belongs to, and it is the link most likely to be pasted into
+    a timeline that renders a picture or nothing at all - two of the migrated
+    shows were publishing every single episode with no card image whatsoever,
+    because their shownotes carry no images and their episodes no own artwork.
+    """
+    candidates = [str(meta.get('first_image') or '').strip()]
+    if meta.get('episode') and meta.get('podcast') is not False and PODCAST_ENABLED:
+        candidates.append(_episode_artwork(meta['episode']))
+        candidates.append(str((PODCAST or {}).get('cover') or '').strip())
+    for src in candidates:
+        if not src:
+            continue
+        return src if _is_remote(src) else f"{SITE_URL}/{src.lstrip('/')}"
+    return None
+
+
 def _player_html(episode):
     """The episode player: cover, show name, one big play control, actions.
 
@@ -2445,12 +2473,11 @@ def build_site():
             {comments_html}
         """
 
-        # Social-card image: only posts that contain an image of their own get
-        # og:image/twitter:image tags. There is no site-default card. The URL is
-        # absolute so scrapers (Mastodon, LinkedIn, Slack) resolve it regardless
-        # of the page it's embedded on.
-        first_image = meta.get('first_image')
-        og_image = f"{SITE_URL}/{first_image}" if first_image else None
+        # Social-card image. A post's own picture wins; an episode with none
+        # falls back to its artwork and then to the show cover, so a shared
+        # episode always gives a scraper something to render. Absolute, so
+        # Mastodon/LinkedIn/Slack resolve it regardless of the embedding page.
+        og_image = _card_image(meta)
         if og_image:
             og_image_tags = (
                 f'<meta property="og:image" content="{esc(og_image)}">\n'

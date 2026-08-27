@@ -489,6 +489,23 @@ every build would make an offline build impossible and a fifty-episode build
 slow. Returns 0 when the host will not say - a legal value every client
 tolerates, costing a progress bar rather than the feed.
 
+### `_card_image(meta)`
+
+The absolute URL of a post's social-card image (`og:image`/`twitter:image` and
+the JSON-LD `image`), or `None`.
+
+Prefers the post's own first hosted body image, then - **for episodes only** -
+the episode's frontmatter artwork, then `podcast.cover`. It also reconciles
+three URL shapes that do not agree: `first_image` is site-root-relative without
+a leading slash, `_episode_artwork()` returns root-absolute, and either may
+already be a remote URL that must pass through untouched.
+
+A written post with no picture still gets no card image, which is the behaviour
+that predates this function. The fallback exists because two migrated shows were
+publishing every episode with none at all - their shownotes carry no images and
+their episodes no artwork of their own - so every link to them rendered as a
+bare text card in every scraper that shows one.
+
 ### `_player_html(episode)`
 
 The episode player: cover, show name, one big play control, progress bar, and
