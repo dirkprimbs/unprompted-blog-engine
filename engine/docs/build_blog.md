@@ -680,6 +680,16 @@ pre-paint script reads `localStorage`, and inside the frame that storage belongs
 to *this site's* origin - so a reader who once chose light here would get a white
 player pasted into their dark timeline.
 
+Starts playing on load when the URL carries `?autoplay=1`, which is what the
+oEmbed iframe asks for and a direct visit does not. Without it a shared episode
+costs two clicks - one to swap the frame in, one on the player - and the first
+of those already meant "play". The call is made on `DOMContentLoaded`, because
+deferred scripts run before that event and `podcast.js` has to have attached its
+listeners first or the audio plays while the button still shows a play icon. A
+rejection is swallowed: browsers differ on whether they delegate autoplay to a
+cross-origin frame at all, and the fallback is simply the player sitting there
+with a play button, which is where this started.
+
 ### `_oembed_json(post)`
 
 The oEmbed payload an episode page advertises, as a JSON string.

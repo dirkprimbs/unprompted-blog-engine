@@ -1733,6 +1733,26 @@ def _embed_page_html(post):
 <body>
 {_player_html(episode, link_target='_blank')}
 <script src="/podcast.js?v={_asset_version()}" defer></script>
+<script>
+// Start on load, but only when opened from a preview card (?autoplay=1). A card
+// costs two clicks otherwise - one to swap this frame in, one on the player -
+// and the first of those already said "play".
+//
+// On DOMContentLoaded rather than inline, because deferred scripts run before
+// that event: podcast.js has to have attached its listeners first, or the audio
+// plays while the button still shows a play icon.
+//
+// A rejection is the ordinary outcome, not an error - browsers differ on
+// whether they will delegate autoplay to a cross-origin frame at all - so it is
+// swallowed. The player is already sitting there with a play button.
+document.addEventListener('DOMContentLoaded', function () {{
+  if (!/(?:^|[?&])autoplay=1(?:&|$)/.test(window.location.search)) return;
+  var audio = document.querySelector('.episode-player audio');
+  if (!audio) return;
+  var started = audio.play();
+  if (started && started.catch) started.catch(function () {{}});
+}});
+</script>
 </body>
 </html>
 """
@@ -1762,7 +1782,11 @@ def _oembed_json(post):
         "title": str(post.get('title', '')),
         "width": _EMBED_WIDTH,
         "height": _EMBED_HEIGHT,
-        "html": (f'<iframe src="{SITE_URL}{embed_href(slug)}" '
+        # ?autoplay=1 is how the page is told it was opened from a preview
+        # card rather than visited: a consumer swaps this iframe in when
+        # somebody clicks the card, so that click is the gesture the audio
+        # starts on. Opening /embed/<slug>.html directly never starts anything.
+        "html": (f'<iframe src="{SITE_URL}{embed_href(slug)}?autoplay=1" '
                  f'width="{_EMBED_WIDTH}" height="{_EMBED_HEIGHT}" '
                  f'frameborder="0" scrolling="no" '
                  f'title="{esc(str(post.get("title", "")))}" '
