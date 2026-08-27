@@ -96,6 +96,11 @@ PUBLIC_ASSETS_DIR = os.path.join(PUBLIC_DIR, "assets")
 # rather than sharing a directory with images the build rewrites and re-encodes.
 PUBLIC_AUDIO_DIR = os.path.join(PUBLIC_DIR, "audio")
 
+# Standalone player pages and oEmbed payloads. Mirrors PUBLIC_AUDIO_DIR in
+# hardcoding its segment: the URL segment itself lives in urls.py's EMBED_DIR,
+# and this module only owns disk layout.
+PUBLIC_EMBED_DIR = os.path.join(PUBLIC_DIR, "embed")
+
 # --- Content pipeline ---
 # Everything about this author's writing, as opposed to the engine that processes
 # it. All of it except VOICE.example.md and TEMPLATE.md is gitignored.

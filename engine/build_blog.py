@@ -22,6 +22,7 @@ from urls import (
     PODCAST_FEED_NAME, PODCAST_PAGE_NAME, ARCHIVE_PAGE_NAME,
     post_href, tag_page_name, tag_href, tag_feed_name, tag_feed_href, home_href,
     audio_href, podcast_feed_href, podcast_href, archive_href,
+    EMBED_DIR, embed_href, oembed_href,
     slugify_tag, slug_for, read_slug, htaccess_content, sitemap_loc,
 )
 # Filesystem layout. Note the split: urls.py above supplies URL space (including
@@ -42,6 +43,7 @@ from paths import (
     PUBLIC_DIR, PUBLIC_ASSETS_DIR,
     PODCAST_ONLY_ASSETS, SITE_STATIC_DIR,
     CONTENT_DIR, CONTENT_ASSETS_DIR, CONTENT_AUDIO_DIR, PUBLIC_AUDIO_DIR,
+    PUBLIC_EMBED_DIR,
     PAGES_DIR,
     LINK_MANIFEST_PATH, EXISTING_TAGS_PATH, COMMENT_MODERATION_PATH,
     REMOTE_AUDIO_LEDGER_PATH,
@@ -374,7 +376,7 @@ def _card_image(meta):
     return None
 
 
-def _player_html(episode):
+def _player_html(episode, link_target=None):
     """The episode player: cover, show name, one big play control, actions.
 
     Progressive enhancement, which matters more here than anywhere else on the
@@ -389,6 +391,11 @@ def _player_html(episode):
                  f' cover art">' if cover else '')
     duration_attr = f' data-duration="{esc(stated)}"' if stated else ''
     label = esc(stated) if stated else 'Play'
+    # An embedded player is inside someone else's page, so its own links have
+    # to leave the frame: without this, tapping "All episodes" loads the whole
+    # site into a card two hundred pixels tall.
+    target_attr = f' target="{esc(link_target)}" rel="noopener"' if link_target else ''
+
     return (
         '<div class="episode-player">'
         '<div class="episode-player-head">'
@@ -415,17 +422,17 @@ def _player_html(episode):
         '</span>'
         '</div>'
         '<div class="episode-actions">'
-        f'<a href="{esc(episode["url"])}" download>'
+        f'<a href="{esc(episode["url"])}" download{target_attr}>'
         '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" '
         'stroke="currentColor" stroke-width="2" stroke-linecap="round">'
         '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'
         '</svg>Download</a>'
-        f'<a href="{esc(podcast_href())}">'
+        f'<a href="{esc(podcast_href())}"{target_attr}>'
         '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" '
         'stroke="currentColor" stroke-width="2" stroke-linecap="round">'
         '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'
         '</svg>All episodes</a>'
-        f'<a href="{esc(podcast_feed_href())}">'
+        f'<a href="{esc(podcast_feed_href())}"{target_attr}>'
         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
         'stroke="currentColor" stroke-width="2.5" stroke-linecap="round">'
         '<path d="M4 11a9 9 0 0 1 9 9"></path>'
@@ -1678,6 +1685,117 @@ def _directory_label(name):
     return _DIRECTORY_LABELS.get(key, str(name).replace('_', ' ').title())
 
 
+# The card an oEmbed consumer renders. Wide and short, because it holds an
+# audio player rather than a video frame; consumers derive the aspect ratio from
+# these two numbers.
+_EMBED_WIDTH = 640
+_EMBED_HEIGHT = 200
+
+
+def _embed_page_html(post):
+    """An episode's player alone in a page, for framing inside someone's feed.
+
+    Built as a literal rather than through base.html, because base.html is the
+    site's page - header, nav, search, comments, footer - and none of that
+    belongs in a card. Keeping it here also keeps `base.html is the single page
+    template` true, and leaves load_template()'s fork-override contract alone.
+
+    The player markup itself is _player_html() verbatim, so this cannot drift
+    from the one on the episode page - and, more to the point, cannot drift from
+    strip_player()'s _PLAYER_OPEN, which removes the same block from both feeds
+    by matching its opening tag.
+
+    The theme is resolved from prefers-color-scheme and nothing else. The site's
+    own pre-paint script reads localStorage, and inside the frame that storage
+    belongs to this site's origin - so a reader who once chose light here would
+    get a white player pasted into their dark timeline.
+    """
+    episode = post['episode']
+    title = str(post.get('title', ''))
+    return f"""<!doctype html>
+<html lang="{esc(SITE_LANGUAGE)}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>{esc(title)} - {esc(SITE_NAME)}</title>
+<script>document.documentElement.dataset.theme =
+  window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';</script>
+<link rel="stylesheet" href="/fonts.css?v={_asset_version()}">
+<link rel="stylesheet" href="/style.css?v={_asset_version()}">
+{_theme_overrides_html()}
+<style>
+  html, body {{ margin: 0; padding: 0; background: var(--bg); }}
+  body {{ padding: 8px; }}
+  .episode-player {{ margin: 0; }}
+</style>
+</head>
+<body>
+{_player_html(episode, link_target='_blank')}
+<script src="/podcast.js?v={_asset_version()}" defer></script>
+</body>
+</html>
+"""
+
+
+def _oembed_json(post):
+    """The oEmbed payload an episode page advertises, as a JSON string.
+
+    Declared `"video"`, which is a fudge: oEmbed has no audio type, and the
+    consumers that embed anything embed video and leave `rich` as a plain link.
+    Every hosted podcast platform makes the same trade.
+
+    `description` is deliberately absent and the thumbnail is whatever the page
+    itself uses as its social card, so the two agree - a consumer shows the
+    thumbnail first and only swaps in the frame when someone clicks it, which is
+    why an episode with no card image is worth fixing before this is worth
+    having.
+    """
+    slug = post['slug']
+    payload = {
+        "version": "1.0",
+        "type": "video",
+        "provider_name": (PODCAST or {}).get('title') or SITE_NAME,
+        "provider_url": SITE_URL,
+        "author_name": AUTHOR_NAME,
+        "author_url": SITE_URL,
+        "title": str(post.get('title', '')),
+        "width": _EMBED_WIDTH,
+        "height": _EMBED_HEIGHT,
+        "html": (f'<iframe src="{SITE_URL}{embed_href(slug)}" '
+                 f'width="{_EMBED_WIDTH}" height="{_EMBED_HEIGHT}" '
+                 f'frameborder="0" scrolling="no" '
+                 f'title="{esc(str(post.get("title", "")))}" '
+                 f'allow="autoplay"></iframe>'),
+    }
+    thumb = _card_image(post)
+    if thumb:
+        payload["thumbnail_url"] = thumb
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
+def build_episode_embeds(episodes):
+    """Write /embed/<slug>.html and /embed/<slug>.json for every episode.
+
+    Both go through write_file_if_changed(), which is what registers them in
+    GENERATED_FILES - anything written straight to disk is deleted by the stale
+    sweep on the very same build.
+
+    Deliberately not added to sitemap.xml. These are machine surfaces: nothing
+    links to them, they carry no content the episode page does not, and offering
+    a search engine a second URL per episode is asking it to choose.
+    """
+    if not (PODCAST_ENABLED and episodes):
+        return
+    os.makedirs(PUBLIC_EMBED_DIR, exist_ok=True)
+    for post in episodes:
+        stem = post['slug']
+        write_file_if_changed(os.path.join(PUBLIC_EMBED_DIR, stem), _embed_page_html(post))
+        write_file_if_changed(
+            os.path.join(PUBLIC_DIR, oembed_href(stem).lstrip('/')), _oembed_json(post))
+    print(f"   🔗 {len(episodes)} episode embed(s) for link previews")
+
+
 def build_podcast_page(base_template, episodes, sitemap_urls):
     """Write public/podcast.html: the show header, the subscribe options, and
     every episode.
@@ -2069,6 +2187,12 @@ def safe_render(template, mappings):
     # Defaults empty so article/home pages only advertise the main feed.
     if "%ALT_FEED_LINK%" not in mappings:
         mappings["%ALT_FEED_LINK%"] = ""
+
+    # oEmbed discovery, set on episode pages only. Same shape as the line above,
+    # and the default is what keeps it that way: without it every page on every
+    # site would render a literal %OEMBED_LINK% in its head.
+    if "%OEMBED_LINK%" not in mappings:
+        mappings["%OEMBED_LINK%"] = ""
 
     # 2. POP the main content out of the dictionary to isolate and protect it
     main_content = mappings.pop("%MAIN_CONTENT%", None)
@@ -2524,6 +2648,17 @@ def build_site():
                 f'href="{SITE_URL}{podcast_feed_href()}" />'
                 if meta.get('episode') and PODCAST_ENABLED else ''
             ),
+            # Discovery for the standalone player. The predicate must match
+            # build_episode_embeds()'s exactly, including `podcast is not
+            # False`, or an opted-out post would advertise a payload that was
+            # never written.
+            "%OEMBED_LINK%": (
+                f'<link rel="alternate" type="application/json+oembed" '
+                f'href="{SITE_URL}{oembed_href(meta["slug"])}" '
+                f'title="{esc(str(meta.get("title", "")))}" />'
+                if meta.get('episode') and meta.get('podcast') is not False
+                and PODCAST_ENABLED else ''
+            ),
             "%MAIN_CONTENT%": article_html
         })
 
@@ -2699,6 +2834,7 @@ def build_site():
     if PODCAST_ENABLED and episodes:
         ensure_episode_guids(episodes)
     build_podcast_page(base_template, episodes, sitemap_urls)
+    build_episode_embeds(episodes)
 
     # --- AUTOMATED SITEMAP OUT ---
     # Runs after build_podcast_page so a hand-written pages/podcast.md wins,

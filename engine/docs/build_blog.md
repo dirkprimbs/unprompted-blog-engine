@@ -506,7 +506,7 @@ publishing every episode with none at all - their shownotes carry no images and
 their episodes no artwork of their own - so every link to them rendered as a
 bare text card in every scraper that shows one.
 
-### `_player_html(episode)`
+### `_player_html(episode, link_target=None)`
 
 The episode player: cover, show name, one big play control, progress bar, and
 the secondary actions under a dotted rule.
@@ -516,6 +516,11 @@ the markup ships a real `<audio controls>` and `static/podcast.js` only hides it
 once it has taken over. A page whose player fails to initialise is still a page
 you can play the episode from - and an episode page that cannot play its episode
 has no content at all.
+
+`link_target` is set to `'_blank'` by the embed page and left alone everywhere
+else. An embedded player sits inside someone else's page, so its Download / All
+episodes / Subscribe links have to leave the frame; without it, tapping one
+loads the whole site into a card two hundred pixels tall.
 
 ### `embed_audio(markdown_text, meta)`
 
@@ -656,6 +661,52 @@ off its own `src`. See `engine/fetch_podlove.py`.
 A file size a listener can act on - MB for an episode, KB for a clip. Integer
 megabytes alone print "0 MB" for anything under one, and a download size of zero
 reads as an error rather than as "small".
+
+### `_embed_page_html(post)`
+
+An episode's player alone in a minimal page, for framing inside a link preview.
+
+Built as a literal rather than through `base.html`, because `base.html` is the
+*site's* page - header, nav, search, comments, footer - and none of that belongs
+in a card. Keeping it here is also what keeps "base.html is the single page
+template" true, and leaves `load_template()`'s fork-override contract untouched.
+
+The player markup is `_player_html()` verbatim, so it cannot drift from the one
+on the episode page, and cannot drift from `strip_player()`'s `_PLAYER_OPEN`,
+which strips the same block out of both feeds by matching its opening tag.
+
+The theme is resolved from `prefers-color-scheme` and nothing else. The site's
+pre-paint script reads `localStorage`, and inside the frame that storage belongs
+to *this site's* origin - so a reader who once chose light here would get a white
+player pasted into their dark timeline.
+
+### `_oembed_json(post)`
+
+The oEmbed payload an episode page advertises, as a JSON string.
+
+Declared `"video"`, which is a fudge worth knowing about: oEmbed has no audio
+type, and the consumers that embed anything embed `video` and leave `rich` as a
+plain link. Every hosted podcast platform makes the same trade.
+
+The thumbnail is whatever `_card_image()` gives the page itself, so the two
+agree - a consumer shows the thumbnail first and only swaps in the frame when
+someone clicks it, which is why an episode with no card image is worth fixing
+before any of this is worth having.
+
+### `build_episode_embeds(episodes)`
+
+Writes `/embed/<slug>.html` and `/embed/<slug>.json` for every episode, and
+nothing at all when the site has no `podcast:` section.
+
+Both go through `write_file_if_changed()`, which is what registers them in
+`GENERATED_FILES`; anything written straight to disk is deleted by the stale
+sweep on the very same build. Its predicate must stay identical to the one
+building the `episodes` list, `podcast is not False` included, or a post that
+opted out of the show would advertise a payload that was never written.
+
+Deliberately **not** added to `sitemap.xml`. These are machine surfaces: nothing
+links to them, they carry no content the episode page does not, and offering a
+search engine a second URL per episode is asking it to choose between them.
 
 ### `_episode_row_html(post)` / `build_podcast_page(base_template, episodes, sitemap_urls)`
 

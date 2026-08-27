@@ -26,6 +26,12 @@ TAGS_DIR = "tags"
 FEEDS_DIR = "feeds"
 AUDIO_DIR = "audio"
 
+# Standalone player pages and their oEmbed payloads. Their own directory because
+# they are machine surfaces, not reader pages: nothing links to them, they are
+# kept out of the sitemap, and an iframe pointed at /posts/ would load a whole
+# article - header, comments and all - inside a card two hundred pixels tall.
+EMBED_DIR = "embed"
+
 # The podcast feed sits at the root beside feed.xml rather than under FEEDS_DIR,
 # which holds per-tag feeds. This one is a site-level feed, and more to the
 # point it is the URL people paste into podcast apps and directories submit to -
@@ -70,6 +76,32 @@ def audio_href(name):
     rewrite rule instead of a table with one line per episode.
     """
     return f"/{AUDIO_DIR}/{name}"
+
+def embed_href(slug):
+    """Root-absolute URL path for an episode's standalone player page.
+    `slug` is the post's own and already ends in '.html'."""
+    return f"/{EMBED_DIR}/{slug}"
+
+
+def oembed_href(slug):
+    """Root-absolute URL path for an episode's oEmbed payload.
+
+    This is the URL an episode page advertises in its
+    `<link rel="alternate" type="application/json+oembed">`, and it is a plain
+    static file rather than a `?url=`-parameterised endpoint.
+
+    That is allowed: link-tag discovery hands the consumer a complete URL to
+    GET. It is also verified rather than assumed - two episodes were published
+    with only their own payload advertised, and Mastodon fetched the right one
+    for each, so it re-reads the tag per page rather than caching one endpoint
+    per host and re-parameterising it. Had it done the latter, every episode
+    would have shown the first one's card. That is the symptom to watch for if
+    this ever regresses; the fix would be a real endpoint, which needs an Apache
+    rewrite to turn the query string back into a filename.
+    """
+    stem = slug[:-len('.html')] if slug.endswith('.html') else slug
+    return f"/{EMBED_DIR}/{stem}.json"
+
 
 def podcast_feed_href():
     """Root-absolute URL path for the podcast (iTunes) feed."""
@@ -205,6 +237,11 @@ def htaccess_content(redirects=()):
 
     Compression: gzip text responses, which matters most for the lazy-loaded
     full-text search index (see the search-index.json build step).
+
+    Deliberately absent: X-Frame-Options and any frame-ancestors CSP. The
+    episode player pages under /embed/ exist to be framed by Mastodon and other
+    oEmbed consumers, so a framing header added here would blank every shared
+    player without breaking anything a test would notice.
 
     Caching: three tiers, and the tier depends entirely on whether a file's URL
     changes when its bytes do. Fonts and the theme's CSS/JS are immutable for a
