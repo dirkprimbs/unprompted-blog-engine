@@ -1685,11 +1685,19 @@ def _directory_label(name):
     return _DIRECTORY_LABELS.get(key, str(name).replace('_', ' ').title())
 
 
-# The card an oEmbed consumer renders. Wide and short, because it holds an
-# audio player rather than a video frame; consumers derive the aspect ratio from
-# these two numbers.
+# The card an oEmbed consumer renders. These are an ASPECT RATIO, not a size:
+# Mastodon scales the frame to the card's width and keeps the proportion, so the
+# height a player actually gets is whatever the reader's column width makes it -
+# 130px in a narrow timeline, 260px in a wide one. Nothing here is a promise
+# that the content fits, which is why the embed's CSS sizes itself against its
+# own viewport height rather than assuming one.
+#
+# 640x280 puts a narrow card at ~130px and a wide one at ~260px, which is the
+# band the layout below is built for. The first attempt at this was 640x200,
+# against a player whose natural height is nearly 290px; it clipped the play
+# button at every width anyone actually reads at.
 _EMBED_WIDTH = 640
-_EMBED_HEIGHT = 200
+_EMBED_HEIGHT = 280
 
 
 def _embed_page_html(post):
@@ -1725,9 +1733,33 @@ def _embed_page_html(post):
 <link rel="stylesheet" href="/style.css?v={_asset_version()}">
 {_theme_overrides_html()}
 <style>
-  html, body {{ margin: 0; padding: 0; background: var(--bg); }}
-  body {{ padding: 8px; }}
-  .episode-player {{ margin: 0; }}
+  /* The frame's height comes from the aspect ratio in the oEmbed payload and
+     the reader's column width - it is not ours to choose. So every size below
+     is capped against the viewport height, and the player shrinks to fit the
+     box it is given instead of spilling out of it. */
+  html, body {{ margin: 0; padding: 0; height: 100%; background: var(--bg); }}
+  body {{ display: flex; align-items: center; overflow: hidden; }}
+  /* No frame of our own: the consumer already drew a card around this, and a
+     second border inside it just looks like a mistake. */
+  .episode-player {{
+    margin: 0; padding: 10px 14px; border: 0; border-radius: 0;
+    background: none; width: 100%; box-sizing: border-box;
+  }}
+  .episode-player-head {{ gap: 12px; align-items: center; }}
+  .episode-player-head img {{ width: auto; height: min(76px, 34vh); }}
+  .episode-player-head .episode-name {{
+    font-size: clamp(14px, 7vh, 19px); line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }}
+  .episode-show {{ font-size: clamp(10px, 4.5vh, 13px); margin-bottom: 2px; }}
+  .episode-controls {{ margin: min(14px, 5vh) 0 0 0; }}
+  /* Download / All episodes / Subscribe only when there is genuinely room. In a
+     short card they are the rows that overflow, and the card itself is already
+     a link to the episode page. */
+  .episode-actions {{ display: none; }}
+  @media (min-height: 250px) {{ .episode-actions {{ display: flex; margin-top: 12px; }} }}
+  @media (max-height: 150px) {{ .episode-show {{ display: none; }} }}
 </style>
 </head>
 <body>

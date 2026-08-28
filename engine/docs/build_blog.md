@@ -680,6 +680,15 @@ pre-paint script reads `localStorage`, and inside the frame that storage belongs
 to *this site's* origin - so a reader who once chose light here would get a white
 player pasted into their dark timeline.
 
+The frame's height is **not** ours to choose: a consumer scales it to the
+card's width and keeps the aspect ratio from the oEmbed payload, so the player
+gets ~130px in a narrow timeline and ~260px in a wide one. Every size in the
+page is therefore capped against the viewport height (`min()`, `clamp()`,
+height media queries) and the secondary Download / All episodes / Subscribe row
+only appears above 250px. The first version declared 640x200 for a player whose
+natural height is nearly 290px, and clipped the play button at every width
+anyone actually reads at.
+
 Starts playing on load when the URL carries `?autoplay=1`, which is what the
 oEmbed iframe asks for and a direct visit does not. Without it a shared episode
 costs two clicks - one to swap the frame in, one on the player - and the first
