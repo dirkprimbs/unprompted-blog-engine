@@ -57,6 +57,19 @@ def _fail(*lines):
     sys.exit(1)
 
 
+def _warn(*lines):
+    """Say something is wrong and carry on.
+
+    The counterpart of _fail, for a configuration that is contradictory rather
+    than unusable. _fail exists because a bad page size or a missing site URL
+    would corrupt the build; a site that names its Mastodon account twice and
+    disagrees with itself still builds a correct site around one of the two
+    answers - it just publishes the wrong one silently, which is precisely the
+    class of mistake nobody discovers by looking at the result."""
+    for line in lines:
+        print(line)
+
+
 def _load():
     if not os.path.exists(SITE_CONFIG_PATH):
         _fail(f"❌ Site configuration not found at '{SITE_CONFIG_PATH}'.",
@@ -155,11 +168,71 @@ def _optional_link(key):
     return '' if value is None else str(value).strip()
 
 
+def _mastodon_profile_url(handle):
+    """The profile URL a fediverse handle points at, or '' if it is not one.
+
+    '@user@instance' (or 'user@instance') -> 'https://instance/@user', which is
+    the canonical shape of a Mastodon profile URL and therefore the exact string
+    a rel="me" link has to carry for the profile at the other end to verify this
+    domain (see _rel_me_links_html in build_blog.py).
+
+    Returns '' rather than guessing for anything that is not a two-part handle.
+    A bare '@user' has no instance to point at, and a value that is already a
+    URL is a URL in the wrong key rather than a handle to rewrite - inventing a
+    link from either produces one that fails verification for no visible
+    reason, which is worse than rendering no link at all."""
+    value = str(handle or '').strip().lstrip('@')
+    if not value or '/' in value:
+        return ''
+    parts = value.split('@')
+    if len(parts) != 2:
+        return ''
+    user, instance = parts[0].strip(), parts[1].strip().lower()
+    # A hostname, not a word. 'https://mastodon/@me' is a link to nowhere.
+    if not user or '.' not in instance or ' ' in instance:
+        return ''
+    return f'https://{instance}/@{user}'
+
+
+def same_profile_url(a, b):
+    """True when two profile URLs address the same account.
+
+    Compared case-insensitively and without a trailing slash: Mastodon
+    usernames are case-insensitive and hostnames certainly are, so '@DrkPrmbs'
+    and '@drkprmbs' are one account and must not be reported as a mismatch.
+
+    Only ever used to COMPARE. What goes into the page is whatever site.yaml
+    says, verbatim - link verification matches the profile URL exactly, so
+    normalising the href itself would be the one transformation that breaks the
+    feature it exists to serve."""
+    return (str(a or '').strip().rstrip('/').lower()
+            == str(b or '').strip().rstrip('/').lower())
+
+
 # Mastodon, the first comment provider. LINK_MASTODON is the header link;
 # FEDIVERSE_CREATOR is the handle used to badge the author's own replies and to
 # set <meta name="fediverse:creator">.
-LINK_MASTODON = _optional_link('mastodon')
 FEDIVERSE_CREATOR = _optional_link('fediverse_creator')
+
+# links.mastodon may now be left out when fediverse_creator already says who you
+# are: a profile URL is a pure function of the handle, so asking for both was
+# asking the same question twice. Both are still accepted, the explicit one
+# wins, and disagreement is reported rather than resolved - the engine has no
+# way to know which of two accounts is the author, and picking one silently is
+# how a site ends up advertising one person and linking to another.
+_CONFIGURED_MASTODON = _optional_link('mastodon')
+_DERIVED_MASTODON = _mastodon_profile_url(FEDIVERSE_CREATOR)
+LINK_MASTODON = _CONFIGURED_MASTODON or _DERIVED_MASTODON
+
+if (_CONFIGURED_MASTODON and _DERIVED_MASTODON
+        and not same_profile_url(_CONFIGURED_MASTODON, _DERIVED_MASTODON)):
+    _warn(f"⚠️  '{SITE_CONFIG_PATH}': links.mastodon and "
+          f"links.fediverse_creator name different accounts "
+          f"({_CONFIGURED_MASTODON} vs. {FEDIVERSE_CREATOR}, which is "
+          f"{_DERIVED_MASTODON}).",
+          "   Using links.mastodon. The fediverse:creator meta tag and the "
+          "comment thread's author badge will follow the other one, and the "
+          "rel=\"me\" link will not verify against it.")
 
 # Bluesky, the second comment provider. LINK_BLUESKY is the header link (shown
 # only when set); BLUESKY_CREATOR is the handle or DID used to badge the

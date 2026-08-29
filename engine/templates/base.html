@@ -96,6 +96,11 @@
     <!-- Whole tag: omitted when links.fediverse_creator is unset. -->
     %FEDIVERSE_CREATOR_META%
 
+    <!-- One rel=me link element per configured identity, empty when there are
+         none. This is the half of Mastodon link verification that does not
+         depend on the header: see _rel_me_links_html in build_blog.py. -->
+    %REL_ME_LINKS%
+
     %STRUCTURED_DATA%
 
 </head>

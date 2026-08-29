@@ -58,18 +58,35 @@ links:
   about: "https://example.com/about"
 
   # --- Mastodon (both optional) ---
-  # Only needed if you announce on Mastodon. Omit both and the header link and
-  # the fediverse:creator meta are not rendered at all - which is what a site
-  # that announces nowhere and carries no comment thread wants.
+  # Only needed if you announce on Mastodon. Omit both and the header link, the
+  # fediverse:creator meta and the rel=me tag are not rendered at all - which is
+  # what a site that announces nowhere and carries no comment thread wants.
 
-  # The header's "Mastodon" link. Rendered with rel="me", which is what lets
-  # your Mastodon profile verify the link back to this site.
+  # The header's "Mastodon" link, and the href of the rel=me tag in the head.
+  # May be left out when fediverse_creator is set: a profile URL is a pure
+  # function of the handle, so the engine derives it. Set it explicitly only if
+  # your profile lives somewhere the handle does not describe. If both are set
+  # and they name different accounts, the build says so and uses this one.
   mastodon: "https://mastodon.social/@example"
 
   # Sets <meta name="fediverse:creator">, which makes Mastodon show your handle
   # on link previews of your posts. Handle form, not a URL. Also used to badge
-  # your own replies as OP in the comment thread.
+  # your own replies as OP in the comment thread, and to derive the profile URL
+  # above when 'mastodon:' is left out.
   fediverse_creator: "@example@mastodon.social"
+
+  # LINK VERIFICATION (the green check on your profile) needs both halves:
+  #
+  #   This side  - the engine emits a rel=me link in every page's <head>, so
+  #                whichever URL of this site you use, it qualifies. It also
+  #                marks the profile link in the header with rel="me", whether
+  #                that link comes from the built-in row or from your own nav:.
+  #   Your side  - put this site's URL in one of your Mastodon profile's
+  #                metadata fields. Mastodon fetches that URL, and matches the
+  #                rel=me href against your profile URL EXACTLY - so the value
+  #                above has to be spelled the way your profile spells it.
+  #
+  # It reads the HTML as served: no JavaScript is run, and it gives up past 1MB.
 
   # --- Bluesky (both optional) ---
   # Replies from Mastodon and Bluesky are blended into one comment thread, so

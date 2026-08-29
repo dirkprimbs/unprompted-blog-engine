@@ -36,7 +36,7 @@ from config import (
     PAGE_SIZE, FEED_ITEMS, VISIBLE_TAGS, WORDS_PER_MINUTE, TAG_EMOJI,
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
     PODCAST, PODCAST_ENABLED, REDIRECTS, ARCHIVE_HEADING,
-    SITE_LANGUAGE, THEME, HEADER,
+    SITE_LANGUAGE, THEME, HEADER, same_profile_url,
 )
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, SITE_TEMPLATE_PATH, STATIC_SOURCE_DIRS,
@@ -2082,8 +2082,21 @@ def _nav_link_html(entry, extra_class=''):
     # Same rule the article bodies get in _externalize_links(): off-site links
     # open in a new tab, and keep sending a referrer so the sites we point at
     # can see where their traffic came from.
-    target = ' target="_blank" rel="noopener"' if _is_external(href) else ''
-    return f'<a href="{esc(href)}"{cls}{target}>{label}</a>'
+    #
+    # rel="me" rides along when the link is one of the author's own profiles.
+    # A site that configures `nav:` puts its Mastodon link here rather than in
+    # the built-in row, and this is then the only copy of it on the page - so
+    # dropping the "me" here quietly costs that site its link verification. Not
+    # gated on _is_external: an author whose instance lives on their own domain
+    # gets no target/noopener, and would have got no rel at all.
+    rel = ['me'] if _is_identity_url(href) else []
+    attrs = ''
+    if _is_external(href):
+        attrs = ' target="_blank"'
+        rel.append('noopener')
+    if rel:
+        attrs += f' rel="{" ".join(rel)}"'
+    return f'<a href="{esc(href)}"{cls}{attrs}>{label}</a>'
 
 
 def _header_nav_html():
@@ -2121,6 +2134,42 @@ def _header_nav_html():
         )
     return (f'<nav class="site-nav" aria-label="Main menu">'
             f'<ul class="nav-menu">{"".join(items)}</ul></nav>')
+
+
+# --- Identity and rel="me" ---------------------------------------------------
+# Every URL that is *this site's author* on another service. The single source
+# of truth for rel="me", so the head link, the built-in header and a custom nav
+# can never disagree about which links are identity links.
+IDENTITY_URLS = tuple(u for u in (LINK_MASTODON, LINK_BLUESKY) if u)
+
+
+def _is_identity_url(href):
+    """True when this href is one of the author's own profiles."""
+    return any(same_profile_url(href, u) for u in IDENTITY_URLS)
+
+
+def _rel_me_links_html():
+    """<link rel="me"> for every configured identity, or '' when there are none.
+
+    This is what actually makes verification work. Mastodon fetches whatever URL
+    you put in your profile's metadata field and looks for an `a` OR a `link`
+    carrying rel="me" whose href matches your profile URL exactly; it follows
+    redirects, runs no JavaScript, and gives up past 1MB. Putting the link in
+    <head> means every page of the site qualifies, so it does not matter which
+    URL you filled the profile field with - and, more to the point, it does not
+    depend on the header.
+
+    That dependency is why this exists. The anchor below carries rel="me" too,
+    but it is only rendered by the *built-in* header; the moment a site.yaml
+    gains a `nav:` the menu is built by _nav_link_html instead, which until this
+    was written emitted rel="noopener" alone. Verification broke on exactly the
+    sites that had bothered to configure a menu, and it broke visibly nowhere -
+    the link is still there, still correct, still blue. A tag in the head cannot
+    be lost that way by any nav configuration at all.
+
+    The href is emitted exactly as site.yaml spells it. Normalising it would
+    break the exact-match rule this whole feature turns on."""
+    return '\n    '.join(f'<link rel="me" href="{esc(u)}">' for u in IDENTITY_URLS)
 
 
 def _social_link_html(url, label):
@@ -2219,6 +2268,9 @@ def safe_render(template, mappings):
         f'<meta name="fediverse:creator" content="{esc(FEDIVERSE_CREATOR)}">'
         if FEDIVERSE_CREATOR else ''
     ))
+    # The rel="me" back-links that let those accounts verify this domain. Empty
+    # for a site with no identities configured, same as the tag above.
+    mappings.setdefault("%REL_ME_LINKS%", _rel_me_links_html())
     # Cache-busting stamp for the theme files (see _asset_version). Not escaped
     # because it is a hex digest this build computed, not author input.
     mappings.setdefault("%ASSET_V%", _asset_version())
