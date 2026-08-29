@@ -620,6 +620,18 @@ ANNOUNCE_PODCAST_PREFIX = _announce_prefix('podcast_prefix', '#podcast')
 ARCHIVE_HEADING = str((_cfg.get('display') or {}).get('archive_heading')
                       or '').strip()
 
+# The heading a transcript starts with, e.g. 'Transkript'. Set it and the build
+# folds everything from that heading to the end of a post into a collapsed
+# <details> (see _collapse_transcript in build_blog.py); leave it out and posts
+# render exactly as they always have, which is what every site.yaml written
+# before this key existed means.
+#
+# It is the author's word rather than a fixed one because the engine runs shows
+# in more than one language, and a German show's transcripts are not going to be
+# introduced by the English word for it.
+TRANSCRIPT_HEADING = str((_cfg.get('display') or {}).get('transcript_heading')
+                         or '').strip()
+
 
 
 # --- Theme (wholly optional) -------------------------------------------------

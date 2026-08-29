@@ -36,7 +36,7 @@ from config import (
     PAGE_SIZE, FEED_ITEMS, VISIBLE_TAGS, WORDS_PER_MINUTE, TAG_EMOJI,
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
     PODCAST, PODCAST_ENABLED, REDIRECTS, ARCHIVE_HEADING,
-    SITE_LANGUAGE, THEME, HEADER, same_profile_url,
+    SITE_LANGUAGE, THEME, HEADER, same_profile_url, TRANSCRIPT_HEADING,
 )
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, SITE_TEMPLATE_PATH, STATIC_SOURCE_DIRS,
@@ -1307,6 +1307,71 @@ def _is_external(href):
     if parsed.scheme not in ('http', 'https'):
         return False
     return parsed.netloc.lower().removeprefix('www.') not in _OWN_HOSTS
+
+# --- Transcripts -------------------------------------------------------------
+
+# Any paragraph or heading, so a marker survives however the source spelled it.
+# fotomenschen.net alone, imported from WordPress, carries seven forms of the
+# same line - <p>, <p><strong>, <p class="has-large-font-size">, <h2>, one with
+# a stray <br>, one with a trailing space.
+_TRANSCRIPT_BLOCK_RE = re.compile(r'<(p|h[1-6])\b[^>]*>(.*?)</\1>',
+                                  re.DOTALL | re.IGNORECASE)
+
+# A marker is a heading, not a sentence that happens to open with the word.
+# Without a cap, a paragraph beginning "Transkript folgt in Kurze..." would fold
+# the entire rest of the post away - and the failure is silent, because the text
+# is all still there, just behind a summary nobody thinks to open. Generous
+# enough for the real ones ("Transkript der Episode:" is 23 characters).
+_TRANSCRIPT_MAX_HEADING_CHARS = 60
+
+
+def _collapse_transcript(html_body):
+    """Fold a transcript into a collapsed <details>, or return the body unchanged.
+
+    A podcast episode's transcript is usually the longest thing on its page and
+    the least likely to be read top to bottom - it is there to be searched, cited
+    and read by people who cannot use the audio, none of which needs it open by
+    default. Everything from the transcript heading to the end of the post goes
+    inside; the heading itself becomes the <summary>, keeping the author's own
+    wording rather than a label the engine invented.
+
+    **Only the page.** The feeds keep the flat body (see podcast_item_xml and
+    the RSS builder, which both read post['html_body'] directly). Podcast clients
+    sanitise shownote HTML against a small tag whitelist that <details> is not
+    on, and a client that drops an unknown element along with its children would
+    drop the transcript with it. The search index is unaffected either way, since
+    plain_text() strips tags before indexing.
+
+    **From the marker to the end of the post**, not "until the next heading":
+    that is what a transcript is in practice, and a rule that ended at the next
+    <h2> would silently cut one that has internal headings in half.
+
+    Native <details>, no JavaScript: it is keyboard accessible for free, it
+    survives a failed script load, and recent Chrome and Firefox expand it
+    automatically when find-in-page matches something inside.
+    """
+    if not TRANSCRIPT_HEADING:
+        return html_body
+    needle = TRANSCRIPT_HEADING.lower()
+    for match in _TRANSCRIPT_BLOCK_RE.finditer(html_body):
+        text = re.sub(r'<[^>]+>', ' ', match.group(2))
+        text = re.sub(r'\s+', ' ', html.unescape(text)).strip()
+        if not text or len(text) > _TRANSCRIPT_MAX_HEADING_CHARS:
+            continue
+        lowered = text.lower()
+        # Bare word, or the word introducing itself ("Transkript der Episode:").
+        # Not a plain prefix test: that would match "Transkriptionsdienste".
+        if not (lowered == needle
+                or lowered.startswith(needle + ' ')
+                or lowered.startswith(needle + ':')):
+            continue
+        return (f'{html_body[:match.start()]}'
+                f'<details class="transcript">'
+                f'<summary>{esc(text)}</summary>'
+                f'{html_body[match.end():]}'
+                f'</details>')
+    return html_body
+
 
 def _externalize_links(html_body):
     # Off-site links open in a new tab. rel="noopener" severs the new page's
@@ -2699,7 +2764,7 @@ def build_site():
                 <span>{meta['date']}</span> • <span>{meta['reading_time']} min read</span> • <span>{tags_html}</span>
             </div>
             <div class="article-content">
-                {_externalize_links(meta['html_body'])}
+                {_collapse_transcript(_externalize_links(meta['html_body']))}
             </div>
             {nav_html}
             {comments_html}

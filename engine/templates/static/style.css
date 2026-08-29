@@ -592,6 +592,84 @@ h1 {
     margin-left: 4px;
 }
 
+/* COLLAPSIBLE TRANSCRIPT
+   A transcript ships collapsed (see _collapse_transcript in build_blog.py). The
+   rule is closed by default, so the styling has to make it obvious there is
+   something behind the summary - hence a real affordance rather than a quiet
+   line of text: a rotating caret, a hover underline, and a rule above it that
+   separates the transcript from the shownotes it follows. */
+.article-content details.transcript {
+    margin: 40px 0 0;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+}
+.article-content details.transcript > summary {
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--accent);
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    /* Both lines are needed to drop the UA triangle: list-style covers modern
+       engines, the pseudo-element covers WebKit. We draw our own below so it
+       can rotate and inherit the accent colour. */
+    list-style: none;
+}
+.article-content details.transcript > summary::-webkit-details-marker {
+    display: none;
+}
+.article-content details.transcript > summary::before {
+    content: "";
+    width: 0;
+    height: 0;
+    border-left: 7px solid currentColor;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    transition: transform 0.15s ease;
+}
+.article-content details.transcript[open] > summary::before {
+    transform: rotate(90deg);
+}
+.article-content details.transcript > summary:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+}
+/* The transcript body is long and secondary to the shownotes above it, so it
+   reads one step quieter than the article proper. */
+.article-content details.transcript > *:not(summary) {
+    color: var(--text-muted);
+}
+.article-content details.transcript > summary + * {
+    margin-top: 24px;
+}
+
+/* A collapsed <details> prints as just its summary, which would drop the
+   transcript from a printed page or a PDF - a regression, since it used to
+   print in full. Best effort, and deliberately not more: ::details-content is
+   the standardised handle for a closed details' contents but is recent, and CSS
+   cannot set the `open` attribute, so the only guaranteed fix is a beforeprint
+   script. The summary therefore stays VISIBLE here - where the reveal does not
+   work the reader at least gets the heading and knows what is missing, rather
+   than a page that quietly ends early. */
+@media print {
+    .article-content details.transcript::details-content {
+        content-visibility: visible;
+    }
+    .article-content details.transcript > *:not(summary) {
+        color: inherit;
+    }
+}
+
+/* A rotating caret is decoration; honour a reader who has asked for less. */
+@media (prefers-reduced-motion: reduce) {
+    .article-content details.transcript > summary::before {
+        transition: none;
+    }
+}
+
 /* COLLAPSIBLE TAGS STYLING */
 details.more-tags {
     width: 100%;

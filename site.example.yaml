@@ -302,6 +302,25 @@ display:
   # Topic pills shown before the "Show more topics..." fold on the homepage.
   visible_tags: 10
 
+  # Optional. The heading your transcripts start with, e.g. "Transkript" or
+  # "Transcript". Name it and everything from that heading to the END of a post
+  # is folded into a collapsed, click-to-expand <details> block, so a long
+  # transcript stops burying the shownotes above it. Leave it out and posts
+  # render exactly as before, which is what every site.yaml written before this
+  # key existed means.
+  #
+  # The heading is matched as a heading, not as a prefix: a paragraph or hN
+  # whose whole text is the word (optionally introducing itself, as in
+  # "Transkript der Episode:") and no longer than 60 characters. Prose that
+  # merely mentions the word is left alone. The first match in a post wins, and
+  # the heading's own wording becomes the summary label.
+  #
+  # Page only. The RSS and podcast feeds keep the flat text - podcast clients
+  # sanitise shownotes against a tag whitelist that <details> is not on - and
+  # the search index is built from stripped text either way, so a transcript
+  # stays fully searchable.
+  # transcript_heading: "Transkript"
+
   # Optional. The heading over the written archive - "Latest Stories" on a
   # normal site, "Articles" when the podcast has taken over the front page.
   # Worth setting if your site is not in English and that heading is one of the
