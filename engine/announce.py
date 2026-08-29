@@ -63,6 +63,15 @@ from paths import CONTENT_DIR
 REQUEST_TIMEOUT = 30
 MAX_RETRIES = 3
 
+# Seconds to wait between two successive announcements. Neither network's hard
+# rate limit needs this - Mastodon allows 300 statuses per 3 hours and Bluesky
+# far more - but posting a backlog back-to-back looks like spam rather than like
+# a person, and an account with no posting history behind it has no reputation
+# to absorb that. The pause only ever applies *between* posts, so the common
+# case of one new post per publish is unaffected. Set ANNOUNCE_DELAY_SECONDS=0
+# to disable.
+ANNOUNCE_DELAY_SECONDS = float(os.environ.get("ANNOUNCE_DELAY_SECONDS", "15"))
+
 # Bluesky's post text is capped at 300 grapheme clusters AND 3000 UTF-8 bytes,
 # both enforced server-side. The stdlib cannot count graphemes, so the budget is
 # measured in codepoints instead: a codepoint count is never lower than a
@@ -70,6 +79,20 @@ MAX_RETRIES = 3
 # several codepoints into one grapheme), so staying under this is always safe.
 BLUESKY_MAX_CHARS = 300
 BLUESKY_MAX_BYTES = 3000
+
+# Mastodon's default status limit. This used to be treated as "generous enough
+# not to need trimming", which held right up until a post with 17 tags produced
+# a 549-character announcement and the instance answered 422. The hashtag list
+# scales with the article's tags, so the ceiling is reachable by ordinary posts.
+# Instances may configure a different limit (some allow far more); 500 is the
+# default and the safe assumption, and ANNOUNCE_MASTODON_MAX_CHARS overrides it
+# for an instance that is known to differ.
+MASTODON_MAX_CHARS = int(os.environ.get("ANNOUNCE_MASTODON_MAX_CHARS", "500"))
+
+# Mastodon substitutes a fixed weight for every URL when it measures a status,
+# so a long canonical link costs no more than a short one. Counting the raw
+# string instead would under-estimate the room available and trim posts that fit.
+MASTODON_URL_WEIGHT = 23
 
 
 def _request(url, data=None, headers=None):
@@ -143,11 +166,13 @@ def build_announcement(title, summary, url, tags, limit=None):
     """Compose the announcement text: '#blog:' prefix, title, summary, the
     canonical link, then one hashtag per tag.
 
-    With a `limit` (Bluesky; Mastodon's 500 is generous enough not to need one)
-    the text is trimmed to fit in priority order: hashtags go first, then the
-    summary is truncated, and only if the title alone still overflows is it cut.
-    The title and the URL are what the announcement is *for*, so they are the
-    last things sacrificed."""
+    Both networks pass a `limit` - Bluesky's 300 and Mastodon's 500 are both
+    reachable, the latter by nothing more exotic than an article carrying a lot
+    of tags. The text is trimmed to fit in priority order: hashtags go first,
+    then the summary is truncated, and only if the title alone still overflows
+    is it cut. The title and the URL are what the announcement is *for*, so they
+    are the last things sacrificed. Callers measure the limit the way their
+    network does (see MASTODON_URL_WEIGHT); here it is a plain character count."""
     hashtags = " ".join(h for h in (hashtagify(t) for t in tags) if h)
 
     def assemble(summary_text, tag_text):
@@ -212,8 +237,14 @@ def _mastodon_post(path, fields):
 def announce_mastodon(title, summary, url, tags):
     """Toot the post and return its frontmatter coordinates."""
     host = _mastodon_server()
+    # Mastodon counts every link as a flat MASTODON_URL_WEIGHT characters however
+    # long it really is, so the raw string may exceed the limit by exactly what
+    # the link over-measures. Handing build_announcement the plain limit would
+    # trim posts that were never actually too long - and since trimming drops the
+    # whole hashtag block first, that costs every hashtag for nothing.
+    allowance = MASTODON_MAX_CHARS + max(0, len(url) - MASTODON_URL_WEIGHT)
     status = _mastodon_post("/api/v1/statuses", {
-        "status": build_announcement(title, summary, url, tags),
+        "status": build_announcement(title, summary, url, tags, limit=allowance),
         "language": "en",          # keep announcements English regardless of post language
         "visibility": "public",
     })
@@ -436,6 +467,9 @@ def announce_all():
 
     print(f"   Announcing on: {', '.join(p['name'] for p in enabled)}")
     changed = 0
+    # Whether any network write has happened yet in this run; gates the pause so
+    # the first announcement goes out immediately.
+    posted_any = False
 
     for filename in sorted(os.listdir(CONTENT_DIR)):
         if not filename.endswith(".md") or filename in ("index.md", "changelog.md"):
@@ -464,7 +498,15 @@ def announce_all():
         new_lines = []
         failed = False
         for provider in todo:
+            # Pause between posts, never before the first one (see
+            # ANNOUNCE_DELAY_SECONDS). Counted per network write rather than per
+            # post, because that is what the receiving side actually sees.
+            if posted_any and ANNOUNCE_DELAY_SECONDS > 0:
+                print(f"   ⏳ Waiting {ANNOUNCE_DELAY_SECONDS:g}s before the "
+                      f"next announcement...")
+                time.sleep(ANNOUNCE_DELAY_SECONDS)
             print(f"📣 Announcing '{title}' on {provider['name']}...")
+            posted_any = True
             try:
                 coordinates, link = provider["announce"](title, summary, url, tags)
             except Exception as e:
