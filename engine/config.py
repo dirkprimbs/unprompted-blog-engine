@@ -509,6 +509,35 @@ def _redirects():
 
 REDIRECTS = _redirects()
 
+# --- Announcements -----------------------------------------------------------
+
+def _announce_prefix(key, default):
+    """One announcement prefix, falling back to the engine's own default.
+
+    The tag that opens every announcement (see announce.py's
+    build_announcement). Two of them, because an episode announced as '#blog'
+    is filed under the wrong thing by everyone who follows the hashtag - and
+    the split only works if a site can name both: this engine runs shows in
+    German as well as English, and a hardcoded English tag would be visibly the
+    engine's word rather than the author's.
+
+    Not in _REQUIRED, and empty is not a valid value: every site.yaml written
+    before this key existed means the defaults, and a blank prefix would post
+    announcements opening with a bare ': '. A missing leading '#' is added
+    rather than rejected, since 'podcast' and '#podcast' are the same
+    intention and only one of them is a hashtag."""
+    value = str((_cfg.get('announce') or {}).get(key) or '').strip()
+    if not value:
+        return default
+    return value if value.startswith('#') else '#' + value
+
+
+# Both are used by announce.py alone; the build never sees them.
+ANNOUNCE_PREFIX = _announce_prefix('prefix', '#blog')
+ANNOUNCE_PODCAST_PREFIX = _announce_prefix('podcast_prefix', '#podcast')
+
+
+
 # The heading over the written archive. Configurable because a podcast-first
 # site names it in the navigation too, and a page headed "Articles" under a menu
 # item reading "Artikel" is visibly two people's work. Deliberately NOT the start

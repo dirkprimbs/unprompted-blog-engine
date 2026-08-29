@@ -4,8 +4,11 @@ Run at publish time, after the site is already live (so the announcement's link
 resolves and Mastodon can render a link-preview card). For every post in
 content/ whose frontmatter carries 'announce: pending', this:
 
-  1. Posts to each configured network (English, '#blog: <title>' + summary +
-     canonical URL + one hashtag per article tag).
+  1. Posts to each configured network (English, '<prefix>: <title>' + summary
+     + canonical URL + one hashtag per article tag). The prefix is '#blog' for
+     an article and '#podcast' for an episode, both overridable per site under
+     'announce:' in site.yaml - a listener following the podcast hashtag should
+     not have to filter the writing out of it, and vice versa.
   2. Bookmarks the post, so it survives any auto-cleanup of old statuses.
   3. Writes the resulting coordinates into the frontmatter - 'mastodon_host' +
      'mastodon_id' and/or 'bluesky_uri' - which the site build turns into the
@@ -60,6 +63,16 @@ from urls import SITE_URL, POSTS_DIR
 # filesystem layout we can't resolve means we'd scan the wrong directory and
 # silently announce nothing. Better to fail loudly at import time.
 from paths import CONTENT_DIR
+
+# The two announcement prefixes, so which hashtag opens a post is the site's
+# decision rather than this file's. See config._announce_prefix.
+from config import ANNOUNCE_PREFIX, ANNOUNCE_PODCAST_PREFIX
+
+# Only for is_audio(): deciding whether a post is an episode uses exactly the
+# same list of extensions the build does, so the hashtag can never disagree
+# with what actually ends up in the podcast feed.
+import audio
+
 REQUEST_TIMEOUT = 30
 MAX_RETRIES = 3
 
@@ -147,6 +160,48 @@ def _fm_tags(fm):
         return []
 
 
+def _standalone_link(line):
+    """The link target of a line that is *nothing but* a link, else None.
+
+    A deliberate copy of build_blog._standalone_link rather than an import:
+    announce.py runs against the markdown on disk and must not drag the whole
+    build (and its config validation) in behind a hashtag. The rule it encodes
+    is six lines long and has not changed since audio embedding was added; if
+    it ever does, these two must be changed together."""
+    stripped = line.strip()
+    md_link = re.fullmatch(r'\[[^\]]*\]\(\s*(\S+?)\s*\)', stripped)
+    if md_link:
+        return md_link.group(1)
+    if re.fullmatch(r'https?://\S+', stripped):
+        return stripped
+    return None
+
+
+def is_episode(fm, body):
+    """True when this post is a podcast episode.
+
+    Mirrors build_blog.embed_audio's rule - a standalone audio link on its own
+    line makes a post an episode, the first one wins - because that is what
+    decides whether the post gets an <enclosure> in the podcast feed. Announcing
+    by a different rule would eventually tag something '#podcast' that no
+    podcast app can subscribe to.
+
+    'podcast: false' opts an episode out of the show while keeping its player,
+    so such a post is announced as an article: the hashtag follows the feed, not
+    the audio file.
+
+    Not derived from 'episode_number': that key is optional and author-written
+    (nothing in ingest.py or fetch_podlove.py sets it), so an episode without
+    one would silently announce as an article."""
+    if str(_fm_value(fm, "podcast") or "").strip().lower() == "false":
+        return False
+    for line in body.split("\n"):
+        src = _standalone_link(line)
+        if src and audio.is_audio(src):
+            return True
+    return False
+
+
 def hashtagify(tag):
     """Turn an article tag into a valid hashtag.
 
@@ -162,9 +217,15 @@ def hashtagify(tag):
     return "#" + "".join(cased)
 
 
-def build_announcement(title, summary, url, tags, limit=None):
-    """Compose the announcement text: '#blog:' prefix, title, summary, the
+def build_announcement(title, summary, url, tags, limit=None,
+                       prefix=ANNOUNCE_PREFIX):
+    """Compose the announcement text: the prefix hashtag, title, summary, the
     canonical link, then one hashtag per tag.
+
+    `prefix` is ANNOUNCE_PREFIX for an article and ANNOUNCE_PODCAST_PREFIX for
+    an episode; the caller decides which (see is_episode). It is counted against
+    `limit` like any other text, so a longer prefix costs hashtags at the margin
+    rather than overflowing the post.
 
     Both networks pass a `limit` - Bluesky's 300 and Mastodon's 500 are both
     reachable, the latter by nothing more exotic than an article carrying a lot
@@ -176,7 +237,7 @@ def build_announcement(title, summary, url, tags, limit=None):
     hashtags = " ".join(h for h in (hashtagify(t) for t in tags) if h)
 
     def assemble(summary_text, tag_text):
-        parts = [f"#blog: {title}"]
+        parts = [f"{prefix}: {title}"]
         if summary_text:
             parts.append(summary_text)
         parts.append(url)
@@ -234,7 +295,7 @@ def _mastodon_post(path, fields):
     )
 
 
-def announce_mastodon(title, summary, url, tags):
+def announce_mastodon(title, summary, url, tags, prefix=ANNOUNCE_PREFIX):
     """Toot the post and return its frontmatter coordinates."""
     host = _mastodon_server()
     # Mastodon counts every link as a flat MASTODON_URL_WEIGHT characters however
@@ -244,7 +305,8 @@ def announce_mastodon(title, summary, url, tags):
     # whole hashtag block first, that costs every hashtag for nothing.
     allowance = MASTODON_MAX_CHARS + max(0, len(url) - MASTODON_URL_WEIGHT)
     status = _mastodon_post("/api/v1/statuses", {
-        "status": build_announcement(title, summary, url, tags, limit=allowance),
+        "status": build_announcement(title, summary, url, tags,
+                                     limit=allowance, prefix=prefix),
         "language": "en",          # keep announcements English regardless of post language
         "visibility": "public",
     })
@@ -346,11 +408,11 @@ def build_facets(text, url):
     return facets
 
 
-def announce_bluesky(title, summary, url, tags):
+def announce_bluesky(title, summary, url, tags, prefix=ANNOUNCE_PREFIX):
     """Post to Bluesky and return its frontmatter coordinates."""
     session = _bluesky_session()
     text = build_announcement(title, summary, url, tags,
-                              limit=BLUESKY_MAX_CHARS)
+                              limit=BLUESKY_MAX_CHARS, prefix=prefix)
     if len(text.encode("utf-8")) > BLUESKY_MAX_BYTES:
         # Only reachable with text that averages ten bytes per character, which
         # prose does not. Refuse rather than let the server reject it.
@@ -487,6 +549,10 @@ def announce_all():
         title = _fm_value(fm, "title") or "New post"
         summary = _fm_value(fm, "summary") or ""
         tags = _fm_tags(fm)
+        # Which hashtag opens the announcement. Decided once per post rather
+        # than per network, so the two never disagree about what a post is.
+        prefix = (ANNOUNCE_PODCAST_PREFIX if is_episode(fm, body)
+                  else ANNOUNCE_PREFIX)
         # Prefer the explicit slug (URL) so the announced link matches the site;
         # older posts without one fall back to the filename, as before.
         slug = _fm_value(fm, "slug") or filename[:-3]
@@ -508,7 +574,8 @@ def announce_all():
             print(f"📣 Announcing '{title}' on {provider['name']}...")
             posted_any = True
             try:
-                coordinates, link = provider["announce"](title, summary, url, tags)
+                coordinates, link = provider["announce"](title, summary, url,
+                                                        tags, prefix)
             except Exception as e:
                 print(f"   ⚠️  Failed to announce '{filename}' on "
                       f"{provider['name']} ({e}). Left pending; will retry "

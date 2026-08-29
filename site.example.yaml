@@ -234,6 +234,23 @@ links:
 # header:
 #   rss: false
 
+# --- Announcements (optional) -------------------------------------------------
+# The hashtag each announcement opens with, before the title. Two of them,
+# because engine/announce.py picks per post: an article is announced under
+# 'prefix', an episode - a post whose body carries a standalone audio link, the
+# same thing that earns it an <enclosure> in the podcast feed - under
+# 'podcast_prefix'. A post marked 'podcast: false' keeps its player but leaves
+# the show, so it is announced as an article.
+#
+# Defaults are '#blog' and '#podcast'. Set them for a site that writes in
+# another language, or for a show whose audience already follows a tag of its
+# own. A leading '#' is added if you leave it off; an empty value means the
+# default rather than no prefix at all.
+#
+# announce:
+#   prefix: "#blog"
+#   podcast_prefix: "#podcast"
+
 # --- Redirects (optional) ----------------------------------------------------
 # Old path -> new path, emitted as 301s at the top of the generated .htaccess.
 # A list of single-key pairs rather than one mapping, because the order Apache
