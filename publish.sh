@@ -206,16 +206,19 @@ if [ ! -f "$SETUP_MARKER" ]; then
     run_diagnostics
 fi
 
-# --build and --serve never touch the network, so they are the modes that work
-# without credentials - useful on a fresh clone, or when you just want to look at
-# the compiled site. Every other mode can end up uploading, so it needs the
-# config.
-if [ ! -f "$CONFIG_FILE" ] && [ "${1:-}" != "--build" ] && [ "${1:-}" != "--serve" ]; then
-    echo "❌ Missing $CONFIG_FILE"
-    echo "💡 Copy publish.local.example.sh to publish.local.sh and add your FTP credentials."
-    echo "   (./publish.sh --build works without it.)"
-    exit 1
-fi
+# Only deployment modes need the local FTP configuration. Ingestion can use
+# local models or an API key inherited from the shell; its model checks report
+# missing keys. Source the file below whenever it exists, in every mode.
+case "${1:-}" in
+    ""|--rebuild|--deploy)
+        if [ ! -f "$CONFIG_FILE" ]; then
+            echo "❌ Missing $CONFIG_FILE"
+            echo "💡 Copy publish.local.example.sh to publish.local.sh and add your FTP credentials."
+            echo "   (--ingest, --build and --serve work without it.)"
+            exit 1
+        fi
+        ;;
+esac
 
 if [ -f "$CONFIG_FILE" ]; then
     # shellcheck source=publish.local.sh
