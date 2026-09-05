@@ -50,8 +50,17 @@ import sys
 import json
 import time
 import datetime
+import fcntl
+import hashlib
+import http.client
+import secrets
+import tempfile
+import uuid
+import urllib.error
 import urllib.parse
 import urllib.request
+
+import yaml
 
 # Imported from urls.py rather than hard-coded so the canonical URL in the
 # announcement always matches the site's own links.
@@ -114,20 +123,27 @@ MASTODON_MAX_CHARS = int(os.environ.get("ANNOUNCE_MASTODON_MAX_CHARS", "500"))
 MASTODON_URL_WEIGHT = 23
 
 
-def _request(url, data=None, headers=None):
+def _request(url, data=None, headers=None, retry_until=None):
     """Send a request and return the parsed JSON response.
 
     Transient failures are retried with backoff. Raises on final failure so the
     caller can leave the post pending and move on to the next one."""
     last_error = None
     for attempt in range(1, MAX_RETRIES + 1):
+        if retry_until is not None and time.time() >= retry_until:
+            raise RuntimeError("Mastodon attempt is too old to retry safely. "
+                               "See engine/docs/announcement-recovery.md.")
         try:
             req = urllib.request.Request(url, data=data, headers=headers or {})
             with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
                 body = resp.read().decode("utf-8")
                 # createBookmark and friends answer 200 with an empty body.
                 return json.loads(body) if body.strip() else {}
-        except Exception as e:
+        except (urllib.error.URLError, TimeoutError, ConnectionError,
+                http.client.HTTPException) as e:
+            if isinstance(e, urllib.error.HTTPError) and not (
+                    e.code in (408, 429) or 500 <= e.code < 600):
+                raise
             last_error = e
             if attempt < MAX_RETRIES:
                 backoff = 2 ** attempt
@@ -135,6 +151,60 @@ def _request(url, data=None, headers=None):
                       f"{attempt}/{MAX_RETRIES}): {e} - retrying in {backoff}s...")
                 time.sleep(backoff)
     raise last_error
+
+
+def _atomic_write(path, text):
+    """Checkpoint before sending, without risking a truncated article."""
+    fd, temporary = tempfile.mkstemp(dir=os.path.dirname(path), prefix='.announce-')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as out:
+            os.fchmod(out.fileno(), os.stat(path).st_mode & 0o777)
+            out.write(text)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(temporary, path)
+        directory = os.open(os.path.dirname(path), os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+class _Attempt:
+    """One provider's durable request and response inside the post frontmatter."""
+
+    def __init__(self, state, save):
+        if not isinstance(state, dict):
+            raise ValueError("Invalid announcement_state; refusing to reset an attempt")
+        self.state, self.save = state, save
+
+    def prepare(self, identity, payload, key):
+        if not self.state:
+            self.state.update(identity=identity, payload=payload, key=key,
+                              started=time.time())
+            self.save()
+        if self.state.get('identity') != identity:
+            raise ValueError("Announcement account changed during a pending attempt. "
+                             "See engine/docs/announcement-recovery.md.")
+        if not all(k in self.state for k in ('payload', 'key', 'started')):
+            raise ValueError("Incomplete announcement_state; refusing to reset an attempt")
+        return self.state
+
+    def complete(self, response):
+        self.state['response'] = response
+        self.save()
+
+
+def _record_key():
+    # app.bsky.feed.post requires a TID, not a UUID. Its 53-bit microsecond
+    # timestamp and 10-bit random clock ID use AT Protocol's sortable base32.
+    number = ((time.time_ns() // 1000) << 10) | secrets.randbits(10)
+    alphabet = '234567abcdefghijklmnopqrstuvwxyz'
+    return ''.join(alphabet[(number >> shift) & 31]
+                   for shift in range(60, -1, -5))
 
 
 def parse_frontmatter(text):
@@ -289,7 +359,7 @@ def _mastodon_enabled():
     return bool(os.environ.get("MASTODON_TOKEN")) and bool(_mastodon_server())
 
 
-def _mastodon_post(path, fields):
+def _mastodon_post(path, fields, key=None, retry_until=None):
     """POST form-encoded fields to the Mastodon API and return parsed JSON."""
     return _request(
         f"https://{_mastodon_server()}{path}",
@@ -297,7 +367,9 @@ def _mastodon_post(path, fields):
         headers={
             "Authorization": f"Bearer {os.environ['MASTODON_TOKEN']}",
             "Content-Type": "application/x-www-form-urlencoded",
+            **({"Idempotency-Key": key} if key else {}),
         },
+        retry_until=retry_until,
     )
 
 
@@ -315,7 +387,7 @@ def _mastodon_language(tag):
 
 
 def announce_mastodon(title, summary, url, tags, prefix=ANNOUNCE_PREFIX,
-                      language=ANNOUNCE_LANGUAGE):
+                      language=ANNOUNCE_LANGUAGE, *, attempt):
     """Toot the post and return its frontmatter coordinates."""
     host = _mastodon_server()
     # Mastodon counts every link as a flat MASTODON_URL_WEIGHT characters however
@@ -335,7 +407,21 @@ def announce_mastodon(title, summary, url, tags, prefix=ANNOUNCE_PREFIX,
     lang = _mastodon_language(language)
     if lang:
         fields["language"] = lang
-    status = _mastodon_post("/api/v1/statuses", fields)
+    # Bind retries to this host and credential, without storing a secret.
+    # A rotated token needs manual reconciliation rather than risking posting
+    # to a different account with the same key.
+    identity = host + ':' + hashlib.sha256(
+        os.environ['MASTODON_TOKEN'].encode()).hexdigest()
+    state = attempt.prepare(identity, fields, uuid.uuid4().hex)
+    status = state.get('response')
+    if status is None:
+        if time.time() < state['started']:
+            raise RuntimeError("Clock moved backwards; cannot safely retry Mastodon")
+        # Mastodon retains keys for up to an hour. Leave a ten-minute margin;
+        # after that, an uncertain attempt needs manual reconciliation.
+        status = _mastodon_post('/api/v1/statuses', state['payload'],
+                                key=state['key'], retry_until=state['started'] + 3000)
+        attempt.complete(status)
     status_id = str(status["id"])
     # Bookmark so the toot survives any future cleanup of old statuses.
     try:
@@ -435,7 +521,7 @@ def build_facets(text, url):
 
 
 def announce_bluesky(title, summary, url, tags, prefix=ANNOUNCE_PREFIX,
-                     language=ANNOUNCE_LANGUAGE):
+                     language=ANNOUNCE_LANGUAGE, *, attempt):
     """Post to Bluesky and return its frontmatter coordinates."""
     session = _bluesky_session()
     text = build_announcement(title, summary, url, tags,
@@ -474,11 +560,42 @@ def announce_bluesky(title, summary, url, tags, prefix=ANNOUNCE_PREFIX,
             },
         },
     }
-    created = _bluesky_call("com.atproto.repo.createRecord", {
-        "repo": session["did"],
-        "collection": "app.bsky.feed.post",
-        "record": record,
-    }, token=session["accessJwt"])
+    state = attempt.prepare(session['did'], record, _record_key())
+    params = {'repo': session['did'], 'collection': 'app.bsky.feed.post',
+              'rkey': state['key']}
+
+    def recover():
+        try:
+            existing = _request(
+                f'https://{_bluesky_pds()}/xrpc/com.atproto.repo.getRecord?'
+                + urllib.parse.urlencode(params),
+                headers={'Authorization': f"Bearer {session['accessJwt']}"})
+        except urllib.error.HTTPError as exc:
+            # A missing record is an XRPC 400, not necessarily an HTTP 404.
+            # No other read failure is evidence that it is safe to create.
+            if exc.code in (400, 404) and json.loads(exc.read()).get('error') == 'RecordNotFound':
+                return None
+            raise
+        if existing.get('value') != state['payload']:
+            raise ValueError('Bluesky record key belongs to different content; refusing to overwrite')
+        return existing
+
+    created = state.get('response')
+    if created is None:
+        created = recover()
+        if created is None:
+            try:
+                created = _bluesky_call('com.atproto.repo.createRecord', {
+                    **params, 'record': state['payload'],
+                }, token=session['accessJwt'])
+            except (urllib.error.URLError, TimeoutError, ConnectionError,
+                    http.client.HTTPException):
+                # A lost response followed by a retry may answer "already
+                # exists". Read our exact key back instead of minting another.
+                created = recover()
+                if created is None:
+                    raise
+        attempt.complete(created)
 
     uri = created["uri"]
     # Bookmark so the post survives any future cleanup, mirroring the Mastodon
@@ -548,6 +665,18 @@ def _merge_frontmatter(fm, new_lines, keep_pending):
 
 
 def announce_all():
+    """Serialize publishers so they cannot reserve separate keys for one post."""
+    if not os.path.isdir(CONTENT_DIR):
+        return 0
+    directory = os.open(CONTENT_DIR, os.O_RDONLY)
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        return _announce_all()
+    finally:
+        os.close(directory)
+
+
+def _announce_all():
     """Announce every pending post on every configured network, then rewrite
     its frontmatter. Returns the number of posts whose frontmatter changed."""
     enabled = [p for p in PROVIDERS if p["enabled"]()]
@@ -576,6 +705,27 @@ def announce_all():
         # Only posts explicitly marked pending are eligible.
         if not _PENDING_RE.search(fm):
             continue
+
+        metadata = yaml.safe_load(fm)
+        states = metadata.get('announcement_state', {})
+        if not isinstance(states, dict):
+            raise ValueError(f'Invalid announcement_state in {path}')
+        if 'announcement_state' in metadata:
+            lines = re.findall(r'^announcement_state: (.+)$', fm, re.MULTILINE)
+            if len(lines) != 1 or json.loads(lines[0]) != states:
+                raise ValueError(f'Keep announcement_state as one JSON line in {path}')
+
+        def checkpoint():
+            nonlocal fm
+            # This engine-owned value is a single JSON line (also valid YAML),
+            # keeping the author's other frontmatter and prose byte-for-byte.
+            line = 'announcement_state: ' + json.dumps(states, ensure_ascii=False)
+            if re.search(r'^announcement_state:', fm, re.MULTILINE):
+                fm = re.sub(r'^announcement_state:.*$', lambda _: line, fm,
+                            flags=re.MULTILINE)
+            else:
+                fm += '\n' + line
+            _atomic_write(path, f'---\n{fm}\n---\n{body}')
 
         title = _fm_value(fm, "title") or "New post"
         summary = _fm_value(fm, "summary") or ""
@@ -610,8 +760,10 @@ def announce_all():
             print(f"📣 Announcing '{title}' on {provider['name']}...")
             posted_any = True
             try:
+                attempt = _Attempt(states.setdefault(provider['name'], {}), checkpoint)
                 coordinates, link = provider["announce"](title, summary, url,
-                                                        tags, prefix, language)
+                                                        tags, prefix, language,
+                                                        attempt=attempt)
             except Exception as e:
                 print(f"   ⚠️  Failed to announce '{filename}' on "
                       f"{provider['name']} ({e}). Left pending; will retry "
@@ -627,9 +779,11 @@ def announce_all():
             continue
 
         new_fm = _merge_frontmatter(fm, new_lines, keep_pending=failed)
+        if not failed:
+            new_fm = re.sub(r'^announcement_state:.*\n?', '', new_fm,
+                            flags=re.MULTILINE)
         new_text = f"---\n{new_fm.strip(chr(10))}\n---\n\n{body.lstrip(chr(10))}"
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(new_text)
+        _atomic_write(path, new_text)
         changed += 1
 
     if changed:

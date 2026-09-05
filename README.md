@@ -214,6 +214,11 @@ Use `--serve` rather than opening `public/index.html` directly: the site's links
 
 **Reviewing what the pipeline produced.** After `--ingest`, open the new file in `content_pipeline/content/` and read it. The title, summary, tags, and inline backlinks are all the model's suggestions - treat them as a starting point and fix any that miss: drop an off-topic tag, add one it didn't think of, remove a backlink that doesn't fit. Edit the Markdown directly - it's yours now, and nothing is public until you build and deploy.
 
+Ingestion works without `publish.local.sh` when using local models or API keys
+exported in your shell. It rejects an existing output filename or public slug
+instead of replacing an article; the draft stays in `sources/` for retry with a
+different title. Edit existing articles directly in `content/`.
+
 **Publishing directly.** Write or generate a finished post into `content_pipeline/content/` (flow b above), then `./publish.sh --rebuild` to build and deploy it. `--rebuild` skips the AI entirely.
 
 **Editing a post.** Edit its `.md` file in `content_pipeline/content/` and rebuild. The URL comes from the `slug` field, so you can rename the file freely; change the `slug` only if you actually want the URL to change (old links will then 404 unless you add a redirect).
@@ -254,6 +259,12 @@ Each network also has two optional entries in `site.yaml` under `links:` - `mast
 **Running a site with no social presence at all** is a supported configuration: leave the credentials out of `publish.local.sh` and the four `links:` entries out of `site.yaml`. Nothing is announced, no header link or `fediverse:creator` meta is emitted, and since the comment thread is driven by the coordinates that announcing writes, no post gets a comment section - `comments.js` is not even loaded. One caveat if you might change your mind later: every ingested post is stamped `announce: pending`, and with no network configured that marker never clears, so enabling one afterwards would announce the whole archive at once. Strip the `announce: pending` lines from older posts first if you only want new ones to go out.
 
 With credentials set, deploying a new post announces it, bookmarks the announcement, and records its coordinates in the post's frontmatter so the thread appears. Re-runs never re-announce. Each network is skipped on its own when its credentials are missing, and if one network fails the other still goes out - the post stays pending and the next run posts only the missing half.
+
+Creation keys and responses are checkpointed in `announcement_state` before
+continuing, so a lost response or interrupted run can recover the original
+announcement. An unresolved Mastodon attempt older than 50 minutes stops for
+manual reconciliation because its server-side idempotency key expires; see
+[announcement recovery](engine/docs/announcement-recovery.md).
 
 Posts published before you enable a network keep whatever threads they already have; enabling Bluesky does not retro-announce your archive.
 
