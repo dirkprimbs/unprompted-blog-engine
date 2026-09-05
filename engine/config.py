@@ -610,6 +610,33 @@ ANNOUNCE_PREFIX = _announce_prefix('prefix', '#blog')
 ANNOUNCE_PODCAST_PREFIX = _announce_prefix('podcast_prefix', '#podcast')
 
 
+def _announce_language(key, default):
+    """The BCP 47 tag an announcement is posted under, or the default.
+
+    An announcement is not written in the engine's language, it is written in
+    the author's: the title and summary are lifted verbatim out of the post. A
+    hardcoded 'en' therefore mislabels every German post - it puts the toot in
+    the wrong language timeline, offers a translate button that translates
+    German into German, and hides it from anyone filtering by language.
+
+    Two of them, on the same reasoning as the two prefixes: a site can write in
+    one language and record in another, and this engine runs exactly that
+    arrangement. The podcast value defaults to podcast.language (which itself
+    defaults to site.language), so a show that already declares German in its
+    feed announces in German without saying so twice.
+
+    Not in _REQUIRED: every site.yaml written before this key existed means
+    site.language, which is the right answer for a single-language site."""
+    value = str((_cfg.get('announce') or {}).get(key) or '').strip()
+    return value or default
+
+
+# Used by announce.py alone, like the prefixes above.
+ANNOUNCE_LANGUAGE = _announce_language('language', SITE_LANGUAGE)
+ANNOUNCE_PODCAST_LANGUAGE = _announce_language(
+    'podcast_language', (PODCAST or {}).get('language') or ANNOUNCE_LANGUAGE)
+
+
 
 # The heading over the written archive. Configurable because a podcast-first
 # site names it in the navigation too, and a page headed "Articles" under a menu

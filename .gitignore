@@ -15,11 +15,16 @@ VOICE.md
 # a fork inherits the engine, not how its author likes to work.
 engine/docs/CONVENTIONS.md
 
-# Claude-specific files (never commit any of Claude's internal files)
+# Coding-agent files (never commit any agent's internal files or the
+# repo guidance written for one - same reasoning as CONVENTIONS.md above: a
+# fork inherits the engine, not the notes someone's assistant reads).
 .claude/
 claude.md
 CLAUDE.md
 CLAUDE.local.md
+.agents/
+agents.md
+AGENTS.md
 
 # Content pipeline working state: the ingestion queue, the drafting workspace,
 # the archive of already-ingested sources, and the published Markdown. Only

@@ -4,11 +4,15 @@ Run at publish time, after the site is already live (so the announcement's link
 resolves and Mastodon can render a link-preview card). For every post in
 content/ whose frontmatter carries 'announce: pending', this:
 
-  1. Posts to each configured network (English, '<prefix>: <title>' + summary
-     + canonical URL + one hashtag per article tag). The prefix is '#blog' for
-     an article and '#podcast' for an episode, both overridable per site under
+  1. Posts to each configured network ('<prefix>: <title>' + summary +
+     canonical URL + one hashtag per article tag). The prefix is '#blog' for an
+     article and '#podcast' for an episode, both overridable per site under
      'announce:' in site.yaml - a listener following the podcast hashtag should
-     not have to filter the writing out of it, and vice versa.
+     not have to filter the writing out of it, and vice versa. The same split
+     decides the language the status is tagged with (announce.language /
+     announce.podcast_language, defaulting to site.language and
+     podcast.language), because the announcement is the post's own title and
+     summary and a site can write in one language and record in another.
   2. Bookmarks the post, so it survives any auto-cleanup of old statuses.
   3. Writes the resulting coordinates into the frontmatter - 'mastodon_host' +
      'mastodon_id' and/or 'bluesky_uri' - which the site build turns into the
@@ -65,8 +69,10 @@ from urls import SITE_URL, POSTS_DIR
 from paths import CONTENT_DIR
 
 # The two announcement prefixes, so which hashtag opens a post is the site's
-# decision rather than this file's. See config._announce_prefix.
-from config import ANNOUNCE_PREFIX, ANNOUNCE_PODCAST_PREFIX
+# decision rather than this file's, and the two languages they are posted under
+# (see config._announce_prefix / config._announce_language).
+from config import (ANNOUNCE_PREFIX, ANNOUNCE_PODCAST_PREFIX,
+                    ANNOUNCE_LANGUAGE, ANNOUNCE_PODCAST_LANGUAGE)
 
 # Only for is_audio(): deciding whether a post is an episode uses exactly the
 # same list of extensions the build does, so the hashtag can never disagree
@@ -295,7 +301,21 @@ def _mastodon_post(path, fields):
     )
 
 
-def announce_mastodon(title, summary, url, tags, prefix=ANNOUNCE_PREFIX):
+def _mastodon_language(tag):
+    """A BCP 47 tag reduced to what Mastodon will accept for a status.
+
+    Mastodon validates the status language against a list of ISO 639 codes and
+    answers 422 for anything not on it, so a perfectly good tag like 'de-DE'
+    would fail the whole post rather than the field. The primary subtag is
+    always on the list and always means the same language, so drop the region.
+    An empty or unusable value returns '' and the field is left off entirely -
+    Mastodon then guesses, which is what it did before this existed."""
+    primary = re.split(r'[-_]', str(tag or '').strip())[0].lower()
+    return primary if re.fullmatch(r'[a-z]{2,3}', primary) else ""
+
+
+def announce_mastodon(title, summary, url, tags, prefix=ANNOUNCE_PREFIX,
+                      language=ANNOUNCE_LANGUAGE):
     """Toot the post and return its frontmatter coordinates."""
     host = _mastodon_server()
     # Mastodon counts every link as a flat MASTODON_URL_WEIGHT characters however
@@ -304,12 +324,18 @@ def announce_mastodon(title, summary, url, tags, prefix=ANNOUNCE_PREFIX):
     # trim posts that were never actually too long - and since trimming drops the
     # whole hashtag block first, that costs every hashtag for nothing.
     allowance = MASTODON_MAX_CHARS + max(0, len(url) - MASTODON_URL_WEIGHT)
-    status = _mastodon_post("/api/v1/statuses", {
+    fields = {
         "status": build_announcement(title, summary, url, tags,
                                      limit=allowance, prefix=prefix),
-        "language": "en",          # keep announcements English regardless of post language
         "visibility": "public",
-    })
+    }
+    # The announcement quotes the post's own title and summary, so it is in the
+    # site's language, not the engine's. Omitted rather than guessed when the
+    # configured tag is unusable (see _mastodon_language).
+    lang = _mastodon_language(language)
+    if lang:
+        fields["language"] = lang
+    status = _mastodon_post("/api/v1/statuses", fields)
     status_id = str(status["id"])
     # Bookmark so the toot survives any future cleanup of old statuses.
     try:
@@ -408,7 +434,8 @@ def build_facets(text, url):
     return facets
 
 
-def announce_bluesky(title, summary, url, tags, prefix=ANNOUNCE_PREFIX):
+def announce_bluesky(title, summary, url, tags, prefix=ANNOUNCE_PREFIX,
+                     language=ANNOUNCE_LANGUAGE):
     """Post to Bluesky and return its frontmatter coordinates."""
     session = _bluesky_session()
     text = build_announcement(title, summary, url, tags,
@@ -423,7 +450,11 @@ def announce_bluesky(title, summary, url, tags, prefix=ANNOUNCE_PREFIX):
         "text": text,
         "createdAt": datetime.datetime.now(datetime.timezone.utc)
                              .isoformat().replace("+00:00", "Z"),
-        "langs": ["en"],
+        # Same reasoning as the Mastodon status language: the text is the
+        # post's own words. Unlike Mastodon, Bluesky takes a full BCP 47 tag,
+        # so a regional variant is kept as written; an empty setting leaves the
+        # field out and the app falls back to guessing.
+        **({"langs": [str(language).strip()]} if str(language).strip() else {}),
         "facets": build_facets(text, url),
         # Bluesky does no link crawling, so a post with a URL in it shows no
         # preview unless the card is supplied. Title only, deliberately: the
@@ -549,10 +580,15 @@ def announce_all():
         title = _fm_value(fm, "title") or "New post"
         summary = _fm_value(fm, "summary") or ""
         tags = _fm_tags(fm)
-        # Which hashtag opens the announcement. Decided once per post rather
-        # than per network, so the two never disagree about what a post is.
-        prefix = (ANNOUNCE_PODCAST_PREFIX if is_episode(fm, body)
-                  else ANNOUNCE_PREFIX)
+        # Which hashtag opens the announcement, and which language it is
+        # posted under. Both decided once per post rather than per network, so
+        # the two never disagree about what a post is - and both follow the
+        # same is_episode() call, so a show recorded in another language than
+        # the site is written in cannot be tagged '#podcast' in one place and
+        # announced as English in another.
+        episode = is_episode(fm, body)
+        prefix = ANNOUNCE_PODCAST_PREFIX if episode else ANNOUNCE_PREFIX
+        language = ANNOUNCE_PODCAST_LANGUAGE if episode else ANNOUNCE_LANGUAGE
         # Prefer the explicit slug (URL) so the announced link matches the site;
         # older posts without one fall back to the filename, as before.
         slug = _fm_value(fm, "slug") or filename[:-3]
@@ -575,7 +611,7 @@ def announce_all():
             posted_any = True
             try:
                 coordinates, link = provider["announce"](title, summary, url,
-                                                        tags, prefix)
+                                                        tags, prefix, language)
             except Exception as e:
                 print(f"   ⚠️  Failed to announce '{filename}' on "
                       f"{provider['name']} ({e}). Left pending; will retry "

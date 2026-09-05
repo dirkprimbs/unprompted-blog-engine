@@ -264,9 +264,22 @@ links:
 # own. A leading '#' is added if you leave it off; an empty value means the
 # default rather than no prefix at all.
 #
+# The language each announcement is posted under, as a BCP 47 tag. The status
+# quotes the post's own title and summary, so this is the language the site is
+# written in - not the engine's. Both default to something already configured:
+# 'language' to site.language, and 'podcast_language' to podcast.language (which
+# itself defaults to site.language), so a German show declared in the feed
+# announces in German without being told twice. Set them only for a site that
+# writes in one language and records in another.
+#
+# Mastodon takes the primary subtag only ('de-DE' is posted as 'de', since it
+# rejects a status language it does not know); Bluesky takes the tag verbatim.
+#
 # announce:
 #   prefix: "#blog"
 #   podcast_prefix: "#podcast"
+#   language: "en"
+#   podcast_language: "de"
 
 # --- Redirects (optional) ----------------------------------------------------
 # Old path -> new path, emitted as 301s at the top of the generated .htaccess.
