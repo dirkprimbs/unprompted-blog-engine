@@ -4,6 +4,8 @@ import re
 import json
 import time
 import datetime
+import fcntl
+import yaml
 
 # Model layer (endpoints, roles, retrying request plumbing) lives in llm.py and
 # is shared with build_blog.py. ALL_ROLES is re-exported so `import ingest;
@@ -14,6 +16,7 @@ from llm import (
 )
 # Filesystem layout (see paths.py) - so this script works from any directory.
 from paths import CONTENT_DIR, VOICE_PATH, LINK_MANIFEST_PATH, EXISTING_TAGS_PATH
+from urls import slug_for
 # Prompt text and per-prompt temperature live in prompts.yaml, not in this file.
 # To change what a model is told, edit that file - not this one.
 import prompts
@@ -253,6 +256,43 @@ def content_filename(date, title):
     words = re.sub(r'[^A-Za-z0-9]+', '_', title).strip('_')
     words = re.sub(r'_+', '_', words) or "post"
     return f"{date}_{words}.md"
+
+
+def write_new_post(output_path, slug, markdown_output):
+    """Reserve a new filename and URL without replacing an existing article."""
+    os.makedirs(CONTENT_DIR, exist_ok=True)
+    # Lock the directory while checking URLs and writing. Unlike a lock on the
+    # destination file, this also serializes writers with different filenames
+    # but the same public slug. No persistent lock file is needed.
+    directory = os.open(CONTENT_DIR, os.O_RDONLY)
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        if os.path.lexists(output_path):
+            raise FileExistsError(f"Article already exists: {output_path}. "
+                                  "Edit it directly or give the draft a new title.")
+        for filename in sorted(os.listdir(CONTENT_DIR)):
+            if not filename.endswith('.md'):
+                continue
+            path = os.path.join(CONTENT_DIR, filename)
+            with open(path, encoding='utf-8') as source:
+                fm, _ = parse_frontmatter(source.read())
+            metadata = yaml.safe_load(fm) if fm is not None else None
+            if metadata is not None and not isinstance(metadata, dict):
+                raise ValueError(f"Invalid frontmatter in {path}; cannot check URL collisions")
+            if slug_for(filename, metadata) == slug_for('', {'slug': slug}):
+                raise FileExistsError(f"URL '{slug}' already belongs to {path}. "
+                                      "Give the draft a different title.")
+        # Keep open outside the cleanup handler: a failed exclusive open must
+        # NEVER cause us to unlink somebody else's existing article.
+        out = open(output_path, 'x', encoding='utf-8')
+        try:
+            with out:
+                out.write(markdown_output)
+        except Exception:
+            os.remove(output_path)
+            raise
+    finally:
+        os.close(directory)
 
 def generate_summary(polished_body, title, voice_guidelines):
     """Generate a crisp, one-sentence summary for the metadata.
@@ -587,16 +627,7 @@ def main():
     markdown_output = build_frontmatter(title, today, final_tags, summary,
                                         themes, slug) + f"\n{polished_body}\n"
 
-    os.makedirs(CONTENT_DIR, exist_ok=True)
-    # Write in one shot; on any failure remove a partial file so publish.sh
-    # never has to guess the output name to clean it up.
-    try:
-        with open(output_path, 'w', encoding='utf-8') as out:
-            out.write(markdown_output)
-    except Exception:
-        if os.path.exists(output_path):
-            os.remove(output_path)
-        raise
+    write_new_post(output_path, slug, markdown_output)
 
     print(f"🎉 Successfully wrote structured post to {output_path}!")
 
