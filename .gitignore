@@ -1,6 +1,9 @@
 # Local publishing credentials — never commit
 publish.local.sh
 
+# Engine sync across this machine's site folders — names local paths, never commit
+sync-engine.sh
+
 # Site identity (name, URL, author, links) — ships as site.example.yaml; copy
 # to site.yaml and make it yours. Keeps a fork from inheriting someone else's
 # name and URLs.
