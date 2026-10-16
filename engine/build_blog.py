@@ -24,6 +24,7 @@ from urls import (
     audio_href, podcast_feed_href, podcast_href, archive_href,
     EMBED_DIR, embed_href, oembed_href,
     slugify_tag, slug_for, read_slug, htaccess_content, sitemap_loc,
+    LLMS_TXT_NAME, llms_txt_href, markdown_href, markdown_link_url,
 )
 # Filesystem layout. Note the split: urls.py above supplies URL space (including
 # POSTS_DIR/TAGS_DIR/FEEDS_DIR, which double as public/ subdirectory names),
@@ -37,6 +38,7 @@ from config import (
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
     PODCAST, PODCAST_ENABLED, REDIRECTS, ARCHIVE_HEADING,
     SITE_LANGUAGE, THEME, HEADER, same_profile_url, TRANSCRIPT_HEADING,
+    LLMS_TXT,
 )
 from paths import (
     REPO_ROOT, TEMPLATE_PATH, SITE_TEMPLATE_PATH, STATIC_SOURCE_DIRS,
@@ -1281,6 +1283,11 @@ def parse_markdown_file(filepath, valid_slugs=None):
     # line so it can never swallow a newline.
     markdown_text = re.sub(r'[ \t]*[—–][ \t]*', ' - ', markdown_text)
 
+    # The post as the author wrote it, for its Markdown copy (llms.txt): after
+    # link healing and the dash rule, before the embeds below swap links for
+    # player and facade markup that means nothing outside a browser.
+    frontmatter['markdown_body'] = markdown_text
+
     # Turn standalone YouTube links into click-to-play facades before conversion.
     markdown_text = embed_youtube(markdown_text)
 
@@ -2040,9 +2047,12 @@ def render_standalone_pages(base_template, sitemap_urls):
     heading in a narrow left column with the body beside it, instead of running
     the body full width under no heading at all. Anything else (including no
     value) renders the plain single-column page, which is what every page
-    written before this key existed keeps."""
+    written before this key existed keeps.
+
+    Returns the pages it rendered, for llms.txt."""
+    rendered = []
     if not os.path.isdir(PAGES_DIR):
-        return
+        return rendered
     for filename in sorted(os.listdir(PAGES_DIR)):
         if not filename.endswith('.md'):
             continue
@@ -2084,11 +2094,19 @@ def render_standalone_pages(base_template, sitemap_urls):
             "%OG_TYPE%": "website",
             "%PAGE_SLUG%": f"{name}.html",
             "%STRUCTURED_DATA%": "",
+            "%LLMS_LINKS%": _llms_links_html(f"/{name}.html"),
             "%MAIN_CONTENT%": f'<div class="{wrapper_class}">{body_html}</div>',
         })
         write_file_if_changed(os.path.join(PUBLIC_DIR, f"{name}.html"), page_html)
+        if LLMS_TXT:
+            write_file_if_changed(
+                os.path.join(PUBLIC_DIR, markdown_href(f"{name}.html")),
+                _page_markdown(title, meta.get('description'), body_md))
         sitemap_urls.append(f"{SITE_URL}/{name}.html")
+        rendered.append({"title": title, "href": f"/{name}.html",
+                         "description": meta.get('description', '')})
         print(f"📄 Rendered standalone page: /{name}.html")
+    return rendered
 
 
 # Theme files the template links by name. Their URLs carry a version query so
@@ -2297,6 +2315,153 @@ def _site_branding_html():
     )
 
 
+# --- LLMS.TXT (site.llms_txt) ---
+_MD_LINK_TARGET_RE = re.compile(r'(\]\(\s*<?)([^)\s>]+)')
+# Reference definitions, '[id]: url'. Not footnotes: '[^1]: text' is prose.
+_MD_REF_DEF_RE = re.compile(r'^( {0,3}\[(?!\^)[^\]]+\]:[ \t]*<?)([^\s>]+)',
+                            re.MULTILINE)
+_HTML_URL_ATTR_RE = re.compile(r'\b((?:src|href)=")([^"]+)(")')
+_SRCSET_ATTR_RE = re.compile(r'\bsrcset="([^"]*)"')
+_URL_SCHEME_RE = re.compile(r'^[a-zA-Z][a-zA-Z0-9+.-]*:')
+
+
+def _absolute_url(target, valid_slugs):
+    if target.startswith(('#', '//')) or _URL_SCHEME_RE.match(target):
+        return target
+    if target.startswith('/'):
+        return SITE_URL + target
+    path, hash_mark, fragment = target.partition('#')
+    if path in valid_slugs:
+        return SITE_URL + post_href(path) + hash_mark + fragment
+    return f"{SITE_URL}/{target}"
+
+
+def _absolutize_markdown(text, valid_slugs):
+    fix = lambda target: _absolute_url(target, valid_slugs)
+
+    def _fix_srcset(match):
+        candidates = []
+        for candidate in match.group(1).split(','):
+            words = candidate.split()
+            if words:
+                candidates.append(' '.join([fix(words[0])] + words[1:]))
+        return 'srcset="' + ', '.join(candidates) + '"'
+
+    text = _MD_LINK_TARGET_RE.sub(lambda m: m.group(1) + fix(m.group(2)), text)
+    text = _MD_REF_DEF_RE.sub(lambda m: m.group(1) + fix(m.group(2)), text)
+    text = _HTML_URL_ATTR_RE.sub(
+        lambda m: m.group(1) + fix(m.group(2)) + m.group(3), text)
+    return _SRCSET_ATTR_RE.sub(_fix_srcset, text)
+
+
+def _one_line(text):
+    return ' '.join(str(text or '').split())
+
+
+def _md_link_text(text):
+    return re.sub(r'([\\\[\]])', r'\\\1', _one_line(text))
+
+
+def _markdown_url(page_href):
+    return markdown_link_url(SITE_URL + markdown_href(page_href))
+
+
+def _post_markdown(post, valid_slugs):
+    facts = [f"Published: {post.get('date', '')}"]
+    if post.get('tags'):
+        facts.append("Tags: " + ", ".join(_one_line(t) for t in post['tags']))
+    facts.append(f"Web page: {markdown_link_url(SITE_URL + post_href(post['slug']))}")
+    lines = [f"# {_one_line(post.get('title'))}", ""]
+    if post.get('summary'):
+        lines += [f"> {_one_line(post['summary'])}", ""]
+    lines += [f"- {fact}" for fact in facts] + ["", "---", ""]
+    body = _absolutize_markdown(post.get('markdown_body', ''), valid_slugs)
+    return "\n".join(lines) + "\n" + body.strip() + "\n"
+
+
+def _page_markdown(title, description, body_md):
+    body = _absolutize_markdown(body_md, set()).strip()
+    lines = []
+    if not body.startswith('# '):
+        lines += [f"# {_one_line(title)}", ""]
+        if description:
+            lines += [f"> {_one_line(description)}", ""]
+    return "\n".join(lines + [body]) + "\n"
+
+
+def llms_txt(posts, pages):
+    episodes = [p for p in posts if PODCAST_ENABLED and p.get('episode')
+                and p.get('podcast') is not False]
+    articles = [p for p in posts if not any(p is e for e in episodes)]
+
+    def _item(title, page_href, note):
+        line = f"- [{_md_link_text(title)}]({_markdown_url(page_href)})"
+        return line + (f": {_one_line(note)}" if _one_line(note) else "")
+
+    def _post_items(selection):
+        return [_item(p.get('title'), post_href(p['slug']),
+                      " - ".join(x for x in (str(p.get('date', '')),
+                                             _one_line(p.get('summary')))
+                                 if x))
+                for p in selection]
+
+    details = [f"Written by {_one_line(AUTHOR_NAME)}, in the language "
+               f"'{SITE_LANGUAGE}'."]
+    if SITE_TAGLINE:
+        details.insert(0, _one_line(SITE_TAGLINE))
+    if PODCAST_ENABLED and episodes:
+        details.append(f"This site is also the home of the podcast "
+                       f"\"{_one_line(PODCAST['title'])}\".")
+    if AI_LABEL:
+        disclosure = _one_line(AI_LABEL).rstrip('.') + "."
+        if _one_line(AI_EXPLAINER):
+            disclosure += " " + _one_line(AI_EXPLAINER).rstrip('.') + "."
+        if AI_EXPLAINER_URL:
+            disclosure += f" (Label explained at {AI_EXPLAINER_URL}.)"
+        details.append(disclosure)
+    details.append("Every link below is a plain Markdown copy of a page; drop "
+                   "the trailing '.md' for the HTML page readers see. Lists "
+                   "are newest first.")
+
+    sections = []
+    if articles:
+        sections.append(("Posts", _post_items(articles)))
+    if episodes:
+        episode_section = ("Episodes", _post_items(episodes))
+        if podcast_is_home():
+            sections.insert(0, episode_section)
+        else:
+            sections.append(episode_section)
+    if pages:
+        sections.append(("Pages", [_item(p['title'], p['href'], p['description'])
+                                   for p in pages]))
+    optional = [f"- [RSS feed]({SITE_URL}/feed.xml): the {FEED_ITEMS} newest "
+                f"posts, full text"]
+    if PODCAST_ENABLED and episodes:
+        optional.append(f"- [Podcast feed]({SITE_URL}{podcast_feed_href()}): "
+                        f"every episode, with audio")
+    optional.append(f"- [Sitemap]({SITE_URL}/sitemap.xml): every HTML page")
+    sections.append(("Optional", optional))
+
+    out = [f"# {_one_line(SITE_NAME)}", "",
+           f"> {_one_line(SITE_DESCRIPTION)}", "",
+           " ".join(details), ""]
+    for heading, items in sections:
+        out += [f"## {heading}", ""] + items + [""]
+    return "\n".join(out)
+
+
+def _llms_links_html(page_href=None):
+    if not LLMS_TXT:
+        return ''
+    tags = []
+    if page_href:
+        tags.append(f'<link rel="alternate" type="text/markdown" '
+                    f'href="{esc(_markdown_url(page_href))}">')
+    tags.append(f'<link rel="describedby" href="{esc(SITE_URL)}{llms_txt_href()}">')
+    return '\n    '.join(tags)
+
+
 def safe_render(template, mappings):
     # 1. Ensure SITE_URL is configured for the outer template layout
     if "%SITE_URL%" not in mappings:
@@ -2336,6 +2501,9 @@ def safe_render(template, mappings):
     # The rel="me" back-links that let those accounts verify this domain. Empty
     # for a site with no identities configured, same as the tag above.
     mappings.setdefault("%REL_ME_LINKS%", _rel_me_links_html())
+    # Every page points at llms.txt; posts and standalone pages override this
+    # to add their own Markdown copy. Empty unless site.llms_txt is on.
+    mappings.setdefault("%LLMS_LINKS%", _llms_links_html())
     # Cache-busting stamp for the theme files (see _asset_version). Not escaped
     # because it is a hex digest this build computed, not author input.
     mappings.setdefault("%ASSET_V%", _asset_version())
@@ -2832,11 +3000,17 @@ def build_site():
                 if meta.get('episode') and meta.get('podcast') is not False
                 and PODCAST_ENABLED else ''
             ),
+            "%LLMS_LINKS%": _llms_links_html(post_href(meta['slug'])),
             "%MAIN_CONTENT%": article_html
         })
 
         # FIXED: Utilizing smart compilation writer
         write_file_if_changed(os.path.join(PUBLIC_DIR, POSTS_DIR, meta['slug']), full_html)
+        # Its Markdown copy, beside it at the same URL plus '.md' (llms.txt).
+        if LLMS_TXT:
+            write_file_if_changed(
+                os.path.join(PUBLIC_DIR, markdown_href(post_href(meta['slug'])).lstrip('/')),
+                _post_markdown(meta, valid_slugs))
 
     sorted_tags = sorted(tags_map.keys(), key=lambda t: len(tags_map[t]), reverse=True)
 
@@ -3012,7 +3186,13 @@ def build_site():
     # --- AUTOMATED SITEMAP OUT ---
     # Runs after build_podcast_page so a hand-written pages/podcast.md wins,
     # exactly as pages/index.md wins over the generated homepage.
-    render_standalone_pages(base_template, sitemap_urls)
+    pages = render_standalone_pages(base_template, sitemap_urls)
+
+    # The map for AI agents (llmstxt.org): every post, episode and page, each
+    # linked to its Markdown copy. Not in the sitemap, which lists HTML pages.
+    if LLMS_TXT:
+        write_file_if_changed(os.path.join(PUBLIC_DIR, LLMS_TXT_NAME),
+                              llms_txt(posts, pages))
 
     sitemap_entries = "".join([f"<url><loc>{sitemap_loc(url)}</loc></url>"
                                for url in sitemap_urls])

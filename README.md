@@ -4,7 +4,7 @@ A personal static site generator with a privacy-first, open-source mindset and a
 
 ## What this is
 
-At heart this is a small Python program that turns a folder of Markdown files into a complete static website - posts, tag pages, RSS feeds, a sitemap, and an in-browser search index - and uploads it to a web server. No database, no runtime, no JavaScript framework. The output is plain files you could host anywhere.
+At heart this is a small Python program that turns a folder of Markdown files into a complete static website - posts, tag pages, RSS feeds, a sitemap, an in-browser search index, and optionally an [llms.txt](https://llmstxt.org) with a Markdown copy of every page for AI agents (`site.llms_txt`) - and uploads it to a web server. No database, no runtime, no JavaScript framework. The output is plain files you could host anywhere.
 
 Two ideas shape it:
 

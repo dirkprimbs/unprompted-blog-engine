@@ -149,6 +149,23 @@ SITE_TAGLINE = str(_cfg['site'].get('tagline') or '').strip()
 SITE_LANGUAGE = str(_cfg['site'].get('language') or 'en').strip()
 
 
+def _llms_txt():
+    """site.llms_txt: publish /llms.txt and a Markdown copy of every page.
+
+    Off unless set, because inviting AI agents in is the site's decision rather
+    than the engine's - and every site.yaml written before the key existed
+    builds exactly as it did. A real YAML boolean only: 'no' quoted into a
+    string is truthy, and this is not a switch to get backwards silently."""
+    raw = _cfg['site'].get('llms_txt', False)
+    if not isinstance(raw, bool):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': site.llms_txt must be true or false "
+              f"(got {raw!r}).")
+    return raw
+
+
+LLMS_TXT = _llms_txt()
+
+
 def _optional_link(key):
     """One optional links.* string, empty when unset.
 

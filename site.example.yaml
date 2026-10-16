@@ -36,6 +36,13 @@ site:
   # where the site is really served or links will point at the wrong host.
   url: "https://blog.example.com"
 
+  # Optional, default false. Publishes /llms.txt (https://llmstxt.org) - a
+  # Markdown map of every post, episode and page for AI agents - plus a clean
+  # Markdown copy of each page at its URL with '.md' appended
+  # (/posts/foo.html.md). Whether to invite AI agents in is your call; if you
+  # turn this on, make sure your robots.txt does not block them.
+  llms_txt: true
+
   # Meta description for the homepage and tag pages.
   description: "Personal thoughts, essays, and notes."
 

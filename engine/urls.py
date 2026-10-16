@@ -171,6 +171,30 @@ def read_slug(filepath, filename):
     except Exception:
         return filename.replace('.md', '.html')
 
+# The llms.txt proposal (https://llmstxt.org): one Markdown map of the site at
+# the root, plus a clean Markdown copy of each page at the page's own URL with
+# '.md' appended - the spec's spelling, so /posts/foo.html has its copy at
+# /posts/foo.html.md and an agent can derive one URL from the other.
+LLMS_TXT_NAME = "llms.txt"
+
+def llms_txt_href():
+    """Root-absolute URL path for the site's llms.txt."""
+    return f"/{LLMS_TXT_NAME}"
+
+def markdown_href(page_href):
+    """Root-absolute URL path for a page's Markdown copy: the page's own + '.md'."""
+    return f"{page_href}.md"
+
+def markdown_link_url(url):
+    """A URL as a Markdown link target may carry it: percent-encoded path.
+
+    A space or a bracket in a tag or slug would otherwise end the link early -
+    the Markdown counterpart of the escaping sitemap_loc() does for XML."""
+    parts = urlsplit(url)
+    path = quote(parts.path, safe="/-._~!$&'*+,;=:@%")
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query,
+                       parts.fragment))
+
 def sitemap_loc(url):
     """A URL as a <loc> may carry it: percent-encoded, then XML-escaped.
 
@@ -319,11 +343,18 @@ def htaccess_content(redirects=()):
         "# --- Compression ---\n"
         "<IfModule mod_mime.c>\n"
         "    AddType application/json .json\n"
+        "    # The Markdown copies of pages (llms.txt). Apache takes the type\n"
+        "    # from the LAST extension that has one, so foo.html.md is served\n"
+        "    # as Markdown, not HTML. UTF-8 for both, or umlauts in a German\n"
+        "    # post reach an agent as mojibake under a default Latin-1.\n"
+        "    AddType text/markdown .md\n"
+        "    AddCharset UTF-8 .md .txt\n"
         "</IfModule>\n"
         "<IfModule mod_deflate.c>\n"
         "    AddOutputFilterByType DEFLATE text/html text/css text/xml \\\n"
         "        application/xml application/rss+xml application/json \\\n"
-        "        application/javascript text/javascript image/svg+xml\n"
+        "        application/javascript text/javascript image/svg+xml \\\n"
+        "        text/markdown text/plain\n"
         "</IfModule>\n"
         "\n"
         "# --- Caching ---\n"
@@ -370,8 +401,9 @@ def htaccess_content(redirects=()):
         "    </FilesMatch>\n"
         "\n"
         "    # HTML itself must not be cached hard: a post's page changes when a\n"
-        "    # comment thread or a backlink does, under the same URL.\n"
-        '    <FilesMatch "\\.(html|xml|json)$">\n'
+        "    # comment thread or a backlink does, under the same URL. The same\n"
+        "    # goes for the Markdown copies and llms.txt, which follow it.\n"
+        '    <FilesMatch "\\.(html|xml|json|md|txt)$">\n'
         '        Header set Cache-Control "max-age=600, must-revalidate"\n'
         "    </FilesMatch>\n"
         "\n"

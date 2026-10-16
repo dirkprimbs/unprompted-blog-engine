@@ -382,8 +382,9 @@ internal links in memory (a '[text](slug.html)' whose target isn't a known
 slug collapses to its plain anchor text, leaving the source .md untouched),
 mirrors any 'assets/' images into public/ and records the first as the
 post's og:image, computes the reading-time estimate, normalises em/en
-dashes to plain spaced hyphens, converts standalone YouTube links to
-facades, renders Markdown, and finally runs _absolutize_body().
+dashes to plain spaced hyphens, keeps that Markdown as `markdown_body` (for
+the llms.txt copy), converts standalone YouTube links to facades, renders
+Markdown, and finally runs _absolutize_body().
 
 Note the returned body has NOT been through _externalize_links() - see
 that entry for why.
@@ -776,6 +777,36 @@ per-tag feed's bytes only change when one of its own posts changes - so
 editing a post no longer rewrites (and re-uploads) every unrelated tag feed.
 Falls back to the current time only if the date can't be parsed.
 
+### `llms_txt(posts, pages)` / `_post_markdown(post, valid_slugs)` / `_page_markdown(title, description, body_md)` / `_llms_links_html(page_href=None)`
+
+The [llms.txt](https://llmstxt.org) support, all gated on `site.llms_txt`.
+
+`llms_txt()` writes the site's map in the spec's order: H1 site name,
+blockquote description, one details paragraph (tagline, author, language, the
+podcast, the AI label, and a note that every link is a Markdown copy), then H2
+lists - Posts, Episodes (first on a podcast-first site), Pages - and an
+`## Optional` section with the feeds and the sitemap. Every list item links the
+page's Markdown copy, not its HTML. Link text has brackets escaped and targets
+are percent-encoded (`markdown_link_url()`), because a bracket in a title or a
+space in a slug would otherwise end the link early.
+
+The copies sit at the page's own URL plus `.md` (`/posts/foo.html.md`,
+`/about.html.md`) - the spec's spelling, so an agent can derive one URL from
+the other. A post's copy is its title, summary, date/tags/web URL, then the body
+from `markdown_body`: the author's Markdown *after* link healing and the dash
+rule but *before* the YouTube/audio embeds, which would otherwise leave player
+markup that means nothing outside a browser. `_absolutize_markdown()` turns
+every relative target (Markdown links, reference definitions, `src`/`href`/
+`srcset` in raw HTML) into a full URL, since a Markdown file is often read with
+no base URL at all. Known bare slugs go to `/posts/`; anything else relative
+resolves against the root. A page whose body already opens with an H1 keeps it
+and gets no generated title.
+
+`_llms_links_html()` fills `%LLMS_LINKS%`: `rel="describedby"` to llms.txt on
+every page, plus `rel="alternate" type="text/markdown"` on posts and standalone
+pages. All of it is empty with the key off, and since `write_file_if_changed`
+registers every copy, turning the key off makes the stale sweep remove them.
+
 ### `build_site()`
 
 The whole compile, in order. Each step exists where it does because a
@@ -793,7 +824,8 @@ later one depends on it:
    two ledgers ingest.py reads on the next run.
 5. Emit the paginated homepage and tag pages (`display.page_size` in
    site.yaml), the sitemap,
-   the main feed and one feed per tag (`display.feed_items` each), search-index.json, and
+   the main feed and one feed per tag (`display.feed_items` each), search-index.json,
+   llms.txt and the per-page Markdown copies (`site.llms_txt` only), and
    the generated .htaccess.
 6. Sweep public/: anything not written by this run and not destined to be
    overwritten by publish.sh's static copies is stale, so it is deleted,
