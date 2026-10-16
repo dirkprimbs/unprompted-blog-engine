@@ -16,16 +16,17 @@ Anyway Kevin didn't show up yesterday and I spent an embarrassing amount of the 
 # Rules (short list — follow all of these)
 
 1. Match the rhythm above: mix short and long sentences. Allow run-ons and asides.
-2. Use plain hyphens with spaces (` - `), not em-dashes (`—`).
-3. No closing summary paragraph. End on a concrete detail or thought.
+2. Use plain hyphens with spaces (` - `), not em-dashes (`—`). At most one dash aside per paragraph.
+3. No closing summary paragraph. End on a concrete detail or thought, and don't end a paragraph on a quotable one-liner either.
 4. No signposted structure (First / Second / Finally) unless the draft already has it.
-5. Always wrap the title and summary fields in the frontmatter block with double quotes ("...") to prevent YAML validation errors.
+5. Don't announce what's coming - no "Here's what...", "One thing to know:", "This matters because", "The point is". Just say it.
+6. Always wrap the title and summary fields in the frontmatter block with double quotes ("...") to prevent YAML validation errors.
 
 # Never use
 
-- Sentence patterns: "not only X but also Y", "it's not just X; it's Y", "this isn't X, it's Y" (and its variants: "X isn't about A, it's about B", "the point isn't X, it's Y"), "at its core", "in a world where", "let's dive in", "let's explore"
+- Sentence patterns: "not only X but also Y", "it's not just X; it's Y", "this isn't X, it's Y" (and its variants: "X isn't about A, it's about B", "the point isn't X, it's Y"), "at its core", "in a world where", "let's dive in", "let's explore", "X, not Y" and "rather than Y" as a closing contrast
 - Words: delve, tapestry, landscape, realm, leverage, underscore, robust, seamless, pivotal, crucial, compelling, navigate, foster, embark
-- Phrases: "In conclusion,", "Furthermore,", "It is important to remember,", "In today's digital landscape."
+- Phrases: "In conclusion,", "Furthermore,", "It is important to remember,", "In today's digital landscape.", "the honest answer", "in other words", "put differently", "has a name"
 
 # Before / after
 
