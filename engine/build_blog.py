@@ -2358,6 +2358,11 @@ def _one_line(text):
     return ' '.join(str(text or '').split())
 
 
+def _sentence(text):
+    text = _one_line(text)
+    return text if not text or text[-1] in '.!?' else text + '.'
+
+
 def _md_link_text(text):
     return re.sub(r'([\\\[\]])', r'\\\1', _one_line(text))
 
@@ -2408,14 +2413,14 @@ def llms_txt(posts, pages):
     details = [f"Written by {_one_line(AUTHOR_NAME)}, in the language "
                f"'{SITE_LANGUAGE}'."]
     if SITE_TAGLINE:
-        details.insert(0, _one_line(SITE_TAGLINE))
+        details.insert(0, _sentence(SITE_TAGLINE))
     if PODCAST_ENABLED and episodes:
         details.append(f"This site is also the home of the podcast "
                        f"\"{_one_line(PODCAST['title'])}\".")
     if AI_LABEL:
-        disclosure = _one_line(AI_LABEL).rstrip('.') + "."
+        disclosure = _sentence(AI_LABEL)
         if _one_line(AI_EXPLAINER):
-            disclosure += " " + _one_line(AI_EXPLAINER).rstrip('.') + "."
+            disclosure += " " + _sentence(AI_EXPLAINER)
         if AI_EXPLAINER_URL:
             disclosure += f" (Label explained at {AI_EXPLAINER_URL}.)"
         details.append(disclosure)
@@ -2433,6 +2438,8 @@ def llms_txt(posts, pages):
         else:
             sections.append(episode_section)
     if pages:
+        # A landing page (pages/index.md) is the front door; list it first.
+        pages = sorted(pages, key=lambda p: p['href'] != '/index.html')
         sections.append(("Pages", [_item(p['title'], p['href'], p['description'])
                                    for p in pages]))
     optional = [f"- [RSS feed]({SITE_URL}/feed.xml): the {FEED_ITEMS} newest "

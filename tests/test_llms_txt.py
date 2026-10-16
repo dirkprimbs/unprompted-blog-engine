@@ -59,7 +59,8 @@ class LlmsTxt(unittest.TestCase):
     def test_structure_follows_the_spec(self):
         posts = [{'title': 'Brackets [here]', 'slug': 'b c.html', 'date': '2026-01-02',
                   'summary': 'Line one\nline two.', 'episode': None}]
-        pages = [{'title': 'About', 'href': '/about.html', 'description': ''}]
+        pages = [{'title': 'About', 'href': '/about.html', 'description': ''},
+                 {'title': 'Home', 'href': '/index.html', 'description': ''}]
         out = build_blog.llms_txt(posts, pages)
         lines = out.splitlines()
         self.assertEqual(lines[0], f'# {build_blog.SITE_NAME}')
@@ -67,6 +68,8 @@ class LlmsTxt(unittest.TestCase):
         self.assertIn(f'- [Brackets \\[here\\]]({SITE}/posts/b%20c.html.md): '
                       '2026-01-02 - Line one line two.', lines)
         self.assertIn(f'- [About]({SITE}/about.html.md)', lines)
+        self.assertLess(lines.index(f'- [Home]({SITE}/index.html.md)'),
+                        lines.index(f'- [About]({SITE}/about.html.md)'))
         headings = [line for line in lines if line.startswith('## ')]
         self.assertEqual(headings, ['## Posts', '## Pages', '## Optional'])
 
