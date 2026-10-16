@@ -777,7 +777,7 @@ per-tag feed's bytes only change when one of its own posts changes - so
 editing a post no longer rewrites (and re-uploads) every unrelated tag feed.
 Falls back to the current time only if the date can't be parsed.
 
-### `llms_txt(posts, pages)` / `_post_markdown(post, valid_slugs)` / `_page_markdown(title, description, body_md)` / `_llms_links_html(page_href=None)`
+### `llms_txt(posts, pages)` / `_post_markdown()` / `_page_markdown()` / `_listing_markdown()` / `_embed_markdown()` / `_md_nav()` / `_report_missing_markdown_copies()` / `_llms_links_html(page_href=None)`
 
 The [llms.txt](https://llmstxt.org) support, all gated on `site.llms_txt`.
 
@@ -790,10 +790,29 @@ page's Markdown copy, not its HTML. Link text has brackets escaped and targets
 are percent-encoded (`markdown_link_url()`), because a bracket in a title or a
 space in a slug would otherwise end the link early.
 
-The copies sit beside their pages with `.html` replaced by `.md`
-(`/posts/foo.md`, `/about.md`, `/index.md`). The spec also allows appending
+**The promise: every page the build writes as `.html` exists as `.md` too**,
+beside it with the extension replaced (`/posts/foo.md`, `/about.md`,
+`/index.md`, `/tags/x-2.md`, `/embed/foo.md`). The spec also allows appending
 (`foo.html.md`); that was the first version and was dropped because the name
-claims a format the file does not contain. A post's copy is its title, summary, date/tags/web URL, then the body
+claims a format the file does not contain. `_report_missing_markdown_copies()`
+enforces the promise on every build: any `.html` in `GENERATED_FILES` without a
+`.md` beside it is named in a warning, so a page type added later cannot quietly
+break it. `public_static/` files are the author's own and are not checked.
+
+**Every copy opens with one navigation line** from `_md_nav()`: `Home` (always
+`/index.md`, whatever that is on the site), then `← Previous` / `Next →` within
+the page's own set, omitted at either end. The sets: posts follow the HTML
+article nav (previous = older); a paginated list (archive, tag, episode list)
+steps through its own pages; standalone pages run landing page first, then
+filename order; embed players step through the episodes. Internal backlinks in a
+post body point at the other post's `.md`, so an agent stays in the Markdown
+set; images and audio stay absolute URLs to the files.
+
+`_listing_markdown()` renders the archive, tag and episode-list pages as
+`- [title](copy.md): date - summary` lines (`_post_list_item()`, shared with
+llms.txt). A generated page that `pages/` overrides (`index`, `podcast`) gets no
+generated copy - `_claimed_by_page()` - so the file is written once rather than
+twice per build, which would change its mtime and re-upload it every deploy. A post's copy is its title, summary, date/tags/web URL, then the body
 from `markdown_body`: the author's Markdown *after* link healing and the dash
 rule but *before* the YouTube/audio embeds, which would otherwise leave player
 markup that means nothing outside a browser. `_absolutize_markdown()` turns

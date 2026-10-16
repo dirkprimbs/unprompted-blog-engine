@@ -1916,9 +1916,14 @@ def build_episode_embeds(episodes):
     if not (PODCAST_ENABLED and episodes):
         return
     os.makedirs(PUBLIC_EMBED_DIR, exist_ok=True)
-    for post in episodes:
+    for i, post in enumerate(episodes):
         stem = post['slug']
         write_file_if_changed(os.path.join(PUBLIC_EMBED_DIR, stem), _embed_page_html(post))
+        if LLMS_TXT:
+            _write_markdown_copy(embed_href(stem), _embed_markdown(
+                post,
+                older=episodes[i + 1] if i + 1 < len(episodes) else None,
+                newer=episodes[i - 1] if i > 0 else None))
         write_file_if_changed(
             os.path.join(PUBLIC_DIR, oembed_href(stem).lstrip('/')), _oembed_json(post))
     print(f"   🔗 {len(episodes)} episode embed(s) for link previews")
@@ -2021,6 +2026,19 @@ def build_podcast_page(base_template, episodes, sitemap_urls):
             "%MAIN_CONTENT%": main,
         })
         write_file_if_changed(os.path.join(PUBLIC_DIR, filename), page)
+        if LLMS_TXT and not _claimed_by_page(filename):
+            intro = []
+            if page_num == 1:
+                intro = [_sentence(cfg['subtitle'] or cfg['description']), ""]
+                if cfg['summary'] != cfg['subtitle']:
+                    intro += [_one_line(cfg['summary']), ""]
+                intro += [f"- Podcast feed: {SITE_URL}{podcast_feed_href()}"]
+                intro += [f"- {_directory_label(name)}: {url}"
+                          for name, url in cfg['links'].items()]
+                # A heading between the two lists, or Markdown joins them.
+                intro += ["", "## Episodes", ""]
+            _write_markdown_copy(page_href(page_num), _listing_markdown(
+                cfg['title'], chunk, page_num, total_pages, page_href, intro))
         # '/' is already the sitemap's first entry; everything else is new.
         if not (at_home and page_num == 1):
             sitemap_urls.append(f"{SITE_URL}{page_href(page_num)}")
@@ -2098,14 +2116,24 @@ def render_standalone_pages(base_template, sitemap_urls):
             "%MAIN_CONTENT%": f'<div class="{wrapper_class}">{body_html}</div>',
         })
         write_file_if_changed(os.path.join(PUBLIC_DIR, f"{name}.html"), page_html)
-        if LLMS_TXT:
-            write_file_if_changed(
-                os.path.join(PUBLIC_DIR, markdown_href(f"{name}.html")),
-                _page_markdown(title, meta.get('description'), body_md))
         sitemap_urls.append(f"{SITE_URL}/{name}.html")
         rendered.append({"title": title, "href": f"/{name}.html",
-                         "description": meta.get('description', '')})
+                         "description": meta.get('description', ''),
+                         "body_md": body_md})
         print(f"📄 Rendered standalone page: /{name}.html")
+
+    # Markdown copies once the whole set is known, since each links its
+    # neighbours. A landing page (pages/index.md) is the front door and leads
+    # the set; the rest keep filename order, as in llms.txt.
+    rendered.sort(key=lambda p: p['href'] != home_href())
+    if LLMS_TXT:
+        for i, page in enumerate(rendered):
+            previous = rendered[i - 1] if i > 0 else None
+            following = rendered[i + 1] if i + 1 < len(rendered) else None
+            _write_markdown_copy(page['href'], _page_markdown(
+                page['title'], page['description'], page['body_md'],
+                (previous['title'], previous['href']) if previous else None,
+                (following['title'], following['href']) if following else None))
     return rendered
 
 
@@ -2332,7 +2360,9 @@ def _absolute_url(target, valid_slugs):
         return SITE_URL + target
     path, hash_mark, fragment = target.partition('#')
     if path in valid_slugs:
-        return SITE_URL + post_href(path) + hash_mark + fragment
+        # A backlink to another post stays inside the Markdown set, so an agent
+        # following it gets the same kind of page it is already reading.
+        return _markdown_url(post_href(path)) + hash_mark + fragment
     return f"{SITE_URL}/{target}"
 
 
@@ -2371,27 +2401,114 @@ def _markdown_url(page_href):
     return markdown_link_url(SITE_URL + markdown_href(page_href))
 
 
-def _post_markdown(post, valid_slugs):
+def _md_nav(previous=None, following=None):
+    """The line every Markdown copy opens with: Home, then the previous and
+    next page of whichever set this page belongs to. Each neighbour is a
+    (label, html_href) pair, or None at either end of the set."""
+    parts = [f"[Home]({_markdown_url(home_href())})"]
+    if previous:
+        parts.append(f"[← Previous: {_md_link_text(previous[0])}]"
+                     f"({_markdown_url(previous[1])})")
+    if following:
+        parts.append(f"[Next: {_md_link_text(following[0])} →]"
+                     f"({_markdown_url(following[1])})")
+    return " · ".join(parts) + "\n\n"
+
+
+def _post_neighbour(post):
+    return (post.get('title'), post_href(post['slug'])) if post else None
+
+
+def _post_list_item(post):
+    note = " - ".join(x for x in (str(post.get('date', '')),
+                                  _one_line(post.get('summary'))) if x)
+    return (f"- [{_md_link_text(post.get('title'))}]"
+            f"({_markdown_url(post_href(post['slug']))})"
+            + (f": {note}" if note else ""))
+
+
+def _post_markdown(post, valid_slugs, older=None, newer=None):
     facts = [f"Published: {post.get('date', '')}"]
     if post.get('tags'):
-        facts.append("Tags: " + ", ".join(_one_line(t) for t in post['tags']))
+        facts.append("Tags: " + ", ".join(
+            f"[{_md_link_text(t)}]({_markdown_url(tag_href(slugify_tag(t)))})"
+            for t in post['tags']))
     facts.append(f"Web page: {markdown_link_url(SITE_URL + post_href(post['slug']))}")
     lines = [f"# {_one_line(post.get('title'))}", ""]
     if post.get('summary'):
         lines += [f"> {_one_line(post['summary'])}", ""]
     lines += [f"- {fact}" for fact in facts] + ["", "---", ""]
     body = _absolutize_markdown(post.get('markdown_body', ''), valid_slugs)
-    return "\n".join(lines) + "\n" + body.strip() + "\n"
+    return (_md_nav(_post_neighbour(older), _post_neighbour(newer))
+            + "\n".join(lines) + "\n" + body.strip() + "\n")
 
 
-def _page_markdown(title, description, body_md):
+def _page_markdown(title, description, body_md, previous=None, following=None):
     body = _absolutize_markdown(body_md, set()).strip()
     lines = []
     if not body.startswith('# '):
         lines += [f"# {_one_line(title)}", ""]
         if description:
             lines += [f"> {_one_line(description)}", ""]
-    return "\n".join(lines + [body]) + "\n"
+    return _md_nav(previous, following) + "\n".join(lines + [body]) + "\n"
+
+
+def _listing_markdown(heading, posts_list, page_num, total_pages, page_href,
+                      intro=()):
+    """A paginated list - the archive, a tag, the episode list - as Markdown.
+    Its set is its own pagination, so previous and next are its pages."""
+    previous = (f"Page {page_num - 1}", page_href(page_num - 1)) if page_num > 1 else None
+    following = ((f"Page {page_num + 1}", page_href(page_num + 1))
+                 if page_num < total_pages else None)
+    lines = [f"# {_one_line(heading)}", ""] + list(intro)
+    lines += [_post_list_item(p) for p in posts_list] or ["Nothing here yet."]
+    if total_pages > 1:
+        lines += ["", f"Page {page_num} of {total_pages}."]
+    return _md_nav(previous, following) + "\n".join(lines) + "\n"
+
+
+def _embed_markdown(post, older=None, newer=None):
+    """The player-only page of an episode. Its set is the other players."""
+    def _neighbour(p):
+        return (p.get('title'), embed_href(p['slug'])) if p else None
+    title = _one_line(post.get('title'))
+    lines = [f"# Player: {title}", "",
+             f"The embeddable audio player for the episode "
+             f"[{_md_link_text(title)}]({_markdown_url(post_href(post['slug']))}).",
+             ""]
+    url = (post.get('episode') or {}).get('url')
+    if url:
+        lines.append(f"- Audio: {markdown_link_url(_absolute_url(str(url), set()))}")
+    return _md_nav(_neighbour(older), _neighbour(newer)) + "\n".join(lines) + "\n"
+
+
+def _claimed_by_page(html_name):
+    """True when content_pipeline/pages/ has its own page at this root URL,
+    which then wins over the generated one (pages/index.md over the archive,
+    pages/podcast.md over the episode list). Checked before writing a generated
+    Markdown copy, so the file is written once per build rather than twice -
+    two writes would change its mtime on every build and re-upload it."""
+    return (html_name.endswith('.html') and '/' not in html_name
+            and os.path.exists(os.path.join(PAGES_DIR, html_name[:-5] + '.md')))
+
+
+def _write_markdown_copy(page_href, text):
+    write_file_if_changed(
+        os.path.join(PUBLIC_DIR, markdown_href(page_href).lstrip('/')), text)
+
+
+def _report_missing_markdown_copies():
+    """Name every generated HTML page that has no Markdown copy. The promise is
+    that any .html URL becomes Markdown with '.md' in its place; a page type
+    added later without a copy would break it silently, so it is checked on
+    every build rather than trusted. Files from public_static/ are the author's
+    own and are not checked - the build never wrote them."""
+    missing = sorted(
+        os.path.relpath(path, PUBLIC_DIR) for path in GENERATED_FILES
+        if path.endswith('.html') and path[:-len('.html')] + '.md' not in GENERATED_FILES)
+    if missing:
+        print(f"⚠️  {len(missing)} generated page(s) have no Markdown copy: "
+              + ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else ""))
 
 
 def llms_txt(posts, pages):
@@ -2404,11 +2521,7 @@ def llms_txt(posts, pages):
         return line + (f": {_one_line(note)}" if _one_line(note) else "")
 
     def _post_items(selection):
-        return [_item(p.get('title'), post_href(p['slug']),
-                      " - ".join(x for x in (str(p.get('date', '')),
-                                             _one_line(p.get('summary')))
-                                 if x))
-                for p in selection]
+        return [_post_list_item(p) for p in selection]
 
     details = [f"Written by {_one_line(AUTHOR_NAME)}, in the language "
                f"'{SITE_LANGUAGE}'."]
@@ -2442,8 +2555,13 @@ def llms_txt(posts, pages):
         pages = sorted(pages, key=lambda p: p['href'] != '/index.html')
         sections.append(("Pages", [_item(p['title'], p['href'], p['description'])
                                    for p in pages]))
-    optional = [f"- [RSS feed]({SITE_URL}/feed.xml): the {FEED_ITEMS} newest "
-                f"posts, full text"]
+    optional = []
+    if not any(p['href'] == home_href() for p in pages):
+        optional.append(f"- [Front page]({_markdown_url(home_href())}): the "
+                        f"newest first, page by page; every Markdown copy links "
+                        f"back to it")
+    optional.append(f"- [RSS feed]({SITE_URL}/feed.xml): the {FEED_ITEMS} newest "
+                    f"posts, full text")
     if PODCAST_ENABLED and episodes:
         optional.append(f"- [Podcast feed]({SITE_URL}{podcast_feed_href()}): "
                         f"every episode, with audio")
@@ -3014,10 +3132,12 @@ def build_site():
         # FIXED: Utilizing smart compilation writer
         write_file_if_changed(os.path.join(PUBLIC_DIR, POSTS_DIR, meta['slug']), full_html)
         # Its Markdown copy, beside it as <slug>.md (llms.txt).
+        # Previous/next follow the article nav above: older, then newer.
         if LLMS_TXT:
-            write_file_if_changed(
-                os.path.join(PUBLIC_DIR, markdown_href(post_href(meta['slug'])).lstrip('/')),
-                _post_markdown(meta, valid_slugs))
+            _write_markdown_copy(post_href(meta['slug']), _post_markdown(
+                meta, valid_slugs,
+                older=posts[idx + 1] if idx < len(posts) - 1 else None,
+                newer=posts[idx - 1] if idx > 0 else None))
 
     sorted_tags = sorted(tags_map.keys(), key=lambda t: len(tags_map[t]), reverse=True)
 
@@ -3136,6 +3256,10 @@ def build_site():
         })
         # FIXED: Utilizing smart compilation writer
         write_file_if_changed(os.path.join(PUBLIC_DIR, index_file_name), index_html)
+        if LLMS_TXT and not _claimed_by_page(index_file_name):
+            _write_markdown_copy(f"/{index_file_name}", _listing_markdown(
+                archive_heading, chunk, current_page_num, total_home_pages,
+                archive_page_href))
 
     for tag, tagged_posts in tags_map.items():
         tagged_posts.sort(key=lambda x: str(x.get('date', '')), reverse=True)
@@ -3178,6 +3302,15 @@ def build_site():
             })
             # FIXED: Utilizing smart compilation writer
             write_file_if_changed(os.path.join(PUBLIC_DIR, TAGS_DIR, tag_file_name), tag_html)
+            if LLMS_TXT:
+                _write_markdown_copy(
+                    tag_href(tag_slug, current_page_num),
+                    _listing_markdown(
+                        f"Posts tagged '{tag}'", chunk, current_page_num,
+                        total_tag_pages, lambda n, s=tag_slug: tag_href(s, n),
+                        intro=[f"Feed for this tag: "
+                               f"{markdown_link_url(SITE_URL + tag_feed_href(tag_slug))}",
+                               ""]))
             
     # --- PODCAST ---
     # Episodes are ordinary posts that happen to carry audio; `podcast: false`
@@ -3200,6 +3333,7 @@ def build_site():
     if LLMS_TXT:
         write_file_if_changed(os.path.join(PUBLIC_DIR, LLMS_TXT_NAME),
                               llms_txt(posts, pages))
+        _report_missing_markdown_copies()
 
     sitemap_entries = "".join([f"<url><loc>{sitemap_loc(url)}</loc></url>"
                                for url in sitemap_urls])

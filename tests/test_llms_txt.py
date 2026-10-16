@@ -24,8 +24,8 @@ class MarkdownCopies(unittest.TestCase):
                 '[ref]: assets/d.png\n'
                 '[^1]: A footnote, not a link definition.\n')
         out = build_blog._absolutize_markdown(text, {'older.html'})
-        self.assertIn(f'[old]({SITE}/posts/older.html)', out)
-        self.assertIn(f'[deep]({SITE}/posts/older.html#part)', out)
+        self.assertIn(f'[old]({SITE}/posts/older.md)', out)
+        self.assertIn(f'[deep]({SITE}/posts/older.md#part)', out)
         self.assertIn(f'[gone]({SITE}/missing/x)', out)
         self.assertIn(f'![pic]({SITE}/assets/a.png "title")', out)
         self.assertIn(f'[ep]({SITE}/audio/e.mp3)', out)
@@ -39,20 +39,44 @@ class MarkdownCopies(unittest.TestCase):
 
     def test_page_description_does_not_swallow_the_body(self):
         out = build_blog._page_markdown('About', 'Who writes here.', 'First line.')
-        self.assertEqual(out, '# About\n\n> Who writes here.\n\nFirst line.\n')
+        self.assertEqual(out, f'[Home]({SITE}/index.md)\n\n'
+                              '# About\n\n> Who writes here.\n\nFirst line.\n')
 
     def test_page_with_its_own_heading_keeps_it(self):
         out = build_blog._page_markdown('About', 'Ignored.', '# Mine\n\nBody')
-        self.assertEqual(out, '# Mine\n\nBody\n')
+        self.assertTrue(out.endswith('\n\n# Mine\n\nBody\n'))
+        self.assertNotIn('Ignored', out)
 
     def test_post_copy_carries_metadata_then_body(self):
         post = {'title': 'A [Bracketed]\nTitle', 'slug': 'a.html', 'date': '2026-01-02',
                 'tags': ['One', 'Two'], 'summary': 'Short.', 'markdown_body': '\nBody\n'}
-        out = build_blog._post_markdown(post, set())
-        self.assertTrue(out.startswith('# A [Bracketed] Title\n\n> Short.\n\n'))
-        self.assertIn('- Tags: One, Two\n', out)
+        older = {'title': 'Old', 'slug': 'old.html'}
+        out = build_blog._post_markdown(post, set(), older=older)
+        self.assertTrue(out.startswith(
+            f'[Home]({SITE}/index.md) · [← Previous: Old]({SITE}/posts/old.md)\n\n'
+            '# A [Bracketed] Title\n\n> Short.\n\n'))
+        self.assertNotIn('Next:', out)
+        self.assertIn(f'- Tags: [One]({SITE}/tags/one.md), [Two]({SITE}/tags/two.md)\n', out)
         self.assertIn(f'- Web page: {SITE}/posts/a.html\n', out)
         self.assertTrue(out.endswith('---\n\nBody\n'))
+
+
+    def test_listing_links_its_own_pages(self):
+        href = lambda n: f'/tags/x-{n}.html' if n > 1 else '/tags/x.html'
+        middle = build_blog._listing_markdown('X', [], 2, 3, href)
+        self.assertTrue(middle.startswith(
+            f'[Home]({SITE}/index.md) · [← Previous: Page 1]({SITE}/tags/x.md)'
+            f' · [Next: Page 3 →]({SITE}/tags/x-3.md)\n\n# X\n'))
+        self.assertIn('Page 2 of 3.', middle)
+
+    def test_every_generated_page_needs_a_copy(self):
+        public = build_blog.PUBLIC_DIR
+        files = {f'{public}/a.html', f'{public}/a.md', f'{public}/posts/b.html'}
+        with patch.object(build_blog, 'GENERATED_FILES', files), \
+             patch('builtins.print') as say:
+            build_blog._report_missing_markdown_copies()
+        self.assertIn('posts/b.html', say.call_args[0][0])
+        self.assertNotIn('a.html', say.call_args[0][0])
 
 
 class LlmsTxt(unittest.TestCase):
