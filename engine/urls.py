@@ -172,9 +172,10 @@ def read_slug(filepath, filename):
         return filename.replace('.md', '.html')
 
 # The llms.txt proposal (https://llmstxt.org): one Markdown map of the site at
-# the root, plus a clean Markdown copy of each page at the page's own URL with
-# '.md' appended - the spec's spelling, so /posts/foo.html has its copy at
-# /posts/foo.html.md and an agent can derive one URL from the other.
+# the root, plus a clean Markdown copy of each page beside it. The spec allows
+# appending '.md' or replacing the extension; this replaces it, so
+# /posts/foo.html has its copy at /posts/foo.md. A 'foo.html.md' would name a
+# format the file does not contain.
 LLMS_TXT_NAME = "llms.txt"
 
 def llms_txt_href():
@@ -182,8 +183,9 @@ def llms_txt_href():
     return f"/{LLMS_TXT_NAME}"
 
 def markdown_href(page_href):
-    """Root-absolute URL path for a page's Markdown copy: the page's own + '.md'."""
-    return f"{page_href}.md"
+    """Root-absolute URL path for a page's Markdown copy: '.html' becomes '.md'."""
+    stem = page_href[:-len('.html')] if page_href.endswith('.html') else page_href
+    return f"{stem}.md"
 
 def markdown_link_url(url):
     """A URL as a Markdown link target may carry it: percent-encoded path.
@@ -343,10 +345,9 @@ def htaccess_content(redirects=()):
         "# --- Compression ---\n"
         "<IfModule mod_mime.c>\n"
         "    AddType application/json .json\n"
-        "    # The Markdown copies of pages (llms.txt). Apache takes the type\n"
-        "    # from the LAST extension that has one, so foo.html.md is served\n"
-        "    # as Markdown, not HTML. UTF-8 for both, or umlauts in a German\n"
-        "    # post reach an agent as mojibake under a default Latin-1.\n"
+        "    # The Markdown copies of pages (llms.txt), and llms.txt itself.\n"
+        "    # UTF-8 for both, or umlauts in a German post reach an agent as\n"
+        "    # mojibake under a default Latin-1.\n"
         "    AddType text/markdown .md\n"
         "    AddCharset UTF-8 .md .txt\n"
         "</IfModule>\n"

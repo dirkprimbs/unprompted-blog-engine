@@ -790,9 +790,10 @@ page's Markdown copy, not its HTML. Link text has brackets escaped and targets
 are percent-encoded (`markdown_link_url()`), because a bracket in a title or a
 space in a slug would otherwise end the link early.
 
-The copies sit at the page's own URL plus `.md` (`/posts/foo.html.md`,
-`/about.html.md`) - the spec's spelling, so an agent can derive one URL from
-the other. A post's copy is its title, summary, date/tags/web URL, then the body
+The copies sit beside their pages with `.html` replaced by `.md`
+(`/posts/foo.md`, `/about.md`, `/index.md`). The spec also allows appending
+(`foo.html.md`); that was the first version and was dropped because the name
+claims a format the file does not contain. A post's copy is its title, summary, date/tags/web URL, then the body
 from `markdown_body`: the author's Markdown *after* link healing and the dash
 rule but *before* the YouTube/audio embeds, which would otherwise leave player
 markup that means nothing outside a browser. `_absolutize_markdown()` turns

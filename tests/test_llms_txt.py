@@ -65,11 +65,11 @@ class LlmsTxt(unittest.TestCase):
         lines = out.splitlines()
         self.assertEqual(lines[0], f'# {build_blog.SITE_NAME}')
         self.assertTrue(lines[2].startswith('> '))
-        self.assertIn(f'- [Brackets \\[here\\]]({SITE}/posts/b%20c.html.md): '
+        self.assertIn(f'- [Brackets \\[here\\]]({SITE}/posts/b%20c.md): '
                       '2026-01-02 - Line one line two.', lines)
-        self.assertIn(f'- [About]({SITE}/about.html.md)', lines)
-        self.assertLess(lines.index(f'- [Home]({SITE}/index.html.md)'),
-                        lines.index(f'- [About]({SITE}/about.html.md)'))
+        self.assertIn(f'- [About]({SITE}/about.md)', lines)
+        self.assertLess(lines.index(f'- [Home]({SITE}/index.md)'),
+                        lines.index(f'- [About]({SITE}/about.md)'))
         headings = [line for line in lines if line.startswith('## ')]
         self.assertEqual(headings, ['## Posts', '## Pages', '## Optional'])
 

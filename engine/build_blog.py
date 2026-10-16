@@ -2424,9 +2424,9 @@ def llms_txt(posts, pages):
         if AI_EXPLAINER_URL:
             disclosure += f" (Label explained at {AI_EXPLAINER_URL}.)"
         details.append(disclosure)
-    details.append("Every link below is a plain Markdown copy of a page; drop "
-                   "the trailing '.md' for the HTML page readers see. Lists "
-                   "are newest first.")
+    details.append("Every link below is a plain Markdown copy of a page; the "
+                   "HTML page readers see has the same URL ending in '.html' "
+                   "instead of '.md'. Lists are newest first.")
 
     sections = []
     if articles:
@@ -3013,7 +3013,7 @@ def build_site():
 
         # FIXED: Utilizing smart compilation writer
         write_file_if_changed(os.path.join(PUBLIC_DIR, POSTS_DIR, meta['slug']), full_html)
-        # Its Markdown copy, beside it at the same URL plus '.md' (llms.txt).
+        # Its Markdown copy, beside it as <slug>.md (llms.txt).
         if LLMS_TXT:
             write_file_if_changed(
                 os.path.join(PUBLIC_DIR, markdown_href(post_href(meta['slug'])).lstrip('/')),
