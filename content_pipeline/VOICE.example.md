@@ -20,7 +20,8 @@ Anyway Kevin didn't show up yesterday and I spent an embarrassing amount of the 
 3. No closing summary paragraph. End on a concrete detail or thought, and don't end a paragraph on a quotable one-liner either.
 4. No signposted structure (First / Second / Finally) unless the draft already has it.
 5. Don't announce what's coming - no "Here's what...", "One thing to know:", "This matters because", "The point is". Just say it.
-6. Always wrap the title and summary fields in the frontmatter block with double quotes ("...") to prevent YAML validation errors.
+6. Don't glue a comment onto a statement with ", and" ("The update shipped on Monday, and it's worth a look."). Use two short sentences, or say one thing ("The update that shipped on Monday is worth a look.").
+7. Always wrap the title and summary fields in the frontmatter block with double quotes ("...") to prevent YAML validation errors.
 
 # Never use
 
