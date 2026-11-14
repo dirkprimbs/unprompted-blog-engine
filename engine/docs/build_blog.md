@@ -329,10 +329,19 @@ theme toggle are not part of it either way: they are engine furniture that
 every site gets, not editorial navigation.
 
 Submenus are plain nested `<ul>`s revealed on hover and `:focus-within`, with
-no JavaScript. Below 900px style.css drops the positioning and lets them sit
-inline, permanently open - a hover target cannot be reached on a touchscreen,
-and a menu that needs a script to open is a menu that is missing whenever the
-script is.
+no JavaScript. Below 900px a hover target cannot be reached, so style.css folds
+the whole menu behind a "Menu" control and opens it as one panel under the
+sticky bar, submenus listed inline. The control is a checkbox plus its
+`<label>`, emitted here ahead of the list and `display:none` above 900px: the
+open state has to live in the document for CSS to read, and a menu that needs
+a script to open is a menu that is missing whenever the script is. The
+checkbox carries `autocomplete="off"` so Firefox does not restore an open menu
+on Back.
+
+### `_menu_word()`
+
+The label on that control: `Menü` when `site.language` starts with `de`,
+`Menu` otherwise. The only engine-written word in the header menu.
 
 ### `_social_link_html(url, label)`
 

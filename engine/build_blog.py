@@ -2220,10 +2220,13 @@ def _header_nav_html():
     furniture that every site gets, not editorial navigation.
 
     Submenus are plain nested <ul>s revealed on hover and on :focus-within, with
-    no JavaScript. On narrow screens style.css drops the positioning and lets
-    them sit inline, permanently open - a hover target cannot be reached on a
-    touchscreen, and a menu that needs a script to open is a menu that is
-    missing whenever the script is."""
+    no JavaScript. On narrow screens a hover target cannot be reached, so
+    style.css folds the whole menu behind the "Menu" control emitted here and
+    lists the submenus inline inside the panel it opens. That control is a
+    checkbox and its <label>, not a button: the open state has to live in the
+    document for CSS to read it, and a menu that needs a script to open is a
+    menu that is missing whenever the script is. Above the fold width both are
+    display:none and the markup is inert."""
     if not NAV:
         return (f'<a href="{esc(LINK_ABOUT)}">About</a>'
                 f'{_social_link_html(LINK_MASTODON, "Mastodon")}'
@@ -2243,8 +2246,23 @@ def _header_nav_html():
             f'<ul class="submenu">{children}</ul>'
             '</li>'
         )
+    # autocomplete="off" because Firefox restores form state on Back and on
+    # reload, and would otherwise hand a reader a page with the menu already
+    # open over the top of it.
+    word = _menu_word()
     return (f'<nav class="site-nav" aria-label="Main menu">'
+            f'<input type="checkbox" id="nav-toggle" class="nav-toggle" '
+            f'autocomplete="off" aria-label="{word}">'
+            f'<label for="nav-toggle" class="nav-toggle-label">'
+            f'<span class="nav-toggle-icon" aria-hidden="true"></span>{word}</label>'
             f'<ul class="nav-menu">{"".join(items)}</ul></nav>')
+
+
+def _menu_word():
+    """The one word of engine-written text in the header menu: the label on the
+    control that opens it on a narrow screen. German sites say it in German;
+    everything else gets the English word, which most languages also use."""
+    return 'Menü' if SITE_LANGUAGE.lower().startswith('de') else 'Menu'
 
 
 # --- Identity and rel="me" ---------------------------------------------------

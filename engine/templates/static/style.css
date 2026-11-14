@@ -309,13 +309,27 @@ header:has(.site-branding) .logo { display: none; }
     background: var(--surface);
 }
 
+/* The control that opens the menu on a narrow screen: a checkbox and its
+   label, emitted by _header_nav_html() on every page that has a menu. Above
+   the fold width neither exists as far as layout is concerned. */
+.site-nav .nav-toggle,
+.site-nav .nav-toggle-label {
+    display: none;
+}
+
 @media (max-width: 900px) {
     /* A hover-revealed panel cannot be opened by a finger, so below the width
-       where the row still fits on one line the submenus stop being panels: they
-       sit inline under their parent, permanently open, indented behind a rule.
-       That makes the whole menu one flat list - taller, but every link is
-       reachable by tap, and none of it depends on a script the engine does not
-       ship. */
+       where the row still fits on one line the menu folds away behind a "Menu"
+       control and opens as one panel under the bar, submenus listed inline.
+
+       It used to sit in the bar itself, every submenu permanently open. That
+       held while menus were four links long. The bar is sticky, so a menu of
+       twenty entries pinned a screenful of links over the top of every page
+       and scrolling could not move it. Folded, the sticky bar is one line
+       again and the links cost nothing until they are asked for.
+
+       No script: the open state is the checkbox, and :checked is all the CSS
+       needs to read. */
     .nav-container {
         flex-wrap: wrap;
         gap: 10px;
@@ -323,32 +337,95 @@ header:has(.site-branding) .logo { display: none; }
     .nav-container > div {
         flex-wrap: wrap;
     }
-    /* The menu takes a whole row to itself and comes first. Without this it
-       shares a flex line with the RSS link and the theme toggle, which - being
-       centred against a menu many lines tall - come to rest halfway down the
-       podcast list, reading as though they belonged to it. The wrap has to go
-       on .header-links itself: that is the flex container those three are in,
-       and 'flex: 1 1 100%' does nothing to a line that cannot break. */
     .header-links {
         flex-wrap: wrap;
-        align-items: flex-start;
     }
-    .site-nav {
-        flex: 1 1 100%;
-        order: -1;
-    }
-    /* Subscribe and search stay paired when the menu wraps above them. */
+    /* Subscribe and search stay paired when the row wraps. */
     .nav-right {
         gap: 10px;
     }
-    .site-nav .nav-menu {
-        flex-wrap: wrap;
-        align-items: flex-start;
-        gap: 8px 20px;
+
+    /* Hidden from sight, not from the keyboard: display:none would take the
+       checkbox out of the tab order and leave the menu reachable by touch
+       only. */
+    .site-nav .nav-toggle {
+        display: block;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: 0;
+        opacity: 0;
+        pointer-events: none;
     }
-    .site-nav li { padding: 6px 0; }
-    .site-nav .has-submenu {
-        flex: 1 1 100%;
+    .site-nav .nav-toggle-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 0;
+        color: var(--text-main);
+        font-weight: 600;
+        cursor: pointer;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .site-nav .nav-toggle:checked + .nav-toggle-label {
+        color: var(--accent);
+    }
+    .site-nav .nav-toggle:focus-visible + .nav-toggle-label {
+        outline: 2px solid var(--accent);
+        outline-offset: 4px;
+        border-radius: 4px;
+    }
+    /* Three bars drawn as one background, so the icon takes the label's colour
+       and needs no image. */
+    .nav-toggle-icon {
+        width: 18px;
+        height: 14px;
+        background:
+            linear-gradient(currentColor, currentColor) 0 0 / 100% 2px no-repeat,
+            linear-gradient(currentColor, currentColor) 0 50% / 100% 2px no-repeat,
+            linear-gradient(currentColor, currentColor) 0 100% / 100% 2px no-repeat;
+    }
+
+    /* The panel. Anchored to the sticky bar (the header itself, or the nav row
+       on a site with a masthead - whichever of the two is positioned), so it
+       opens directly under it wherever the reader has scrolled to. It scrolls
+       inside itself rather than growing past the bottom of the screen: a menu
+       taller than the phone would otherwise have entries nothing can reach,
+       since the bar it hangs from does not move. The allowance is generous
+       because the bar is two lines tall on a site with a long name. */
+    .site-nav .nav-menu {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 110;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        padding: 4px 20px 16px 20px;
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+        max-height: calc(100vh - 140px);
+        max-height: calc(100dvh - 140px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    .site-nav .nav-toggle:checked ~ .nav-menu {
+        display: flex;
+    }
+    .site-nav li { padding: 0; }
+    .site-nav .nav-menu > li + li {
+        border-top: 1px solid var(--border);
+    }
+    .site-nav a,
+    .site-nav .submenu-parent {
+        display: block;
+        padding: 12px 0;
+        white-space: normal;
     }
     .site-nav .has-submenu > .submenu-parent::after { display: none; }
     .site-nav .submenu {
@@ -356,16 +433,14 @@ header:has(.site-branding) .logo { display: none; }
         opacity: 1;
         visibility: visible;
         min-width: 0;
-        margin: 6px 0 0 2px;
+        margin: 0 0 12px 2px;
         padding: 0 0 0 14px;
         border: 0;
         border-left: 2px solid var(--border);
         box-shadow: none;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 2px 18px;
+        background: none;
     }
-    .site-nav .submenu a { padding: 4px 0; }
+    .site-nav .submenu a { padding: 8px 0; }
     .site-nav .submenu a:hover { background: none; }
 }
 
