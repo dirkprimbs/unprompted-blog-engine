@@ -337,3 +337,7 @@ The one static directory that *is* tracked is `engine/templates/static/` - the t
 ## A note on deeper documentation
 
 This README is the tour. The details of how the engine is put together - the module boundaries, the build steps, the conventions - live in `engine/docs/`. Start there if you want to change how the engine itself works.
+
+## Development process
+
+Separate from the optional editorial pipeline above, the engine itself is developed heavily with AI on Linux in VS Code. I write very little code by hand and read the codebase selectively. For initial coding I lean on Claude Code (Opus or Fable), then use OpenCode with various models via OpenRouter - often Gemini Neon as the main driver - for architecture reviews, bug hunting, detailed architecture and refactoring. Everything else is done manually with the usual tools.
