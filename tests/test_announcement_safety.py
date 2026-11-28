@@ -144,6 +144,77 @@ class AnnouncementSafety(unittest.TestCase):
                 announce.announce_bluesky('Title', '', 'https://site.test', [], attempt=self.attempt())
         send.assert_not_called()
 
+    def bluesky_record(self, image, upload):
+        """Announce once with the network stubbed; return the record sent."""
+        sent = {}
+
+        def request(url, data=None, headers=None, retry_until=None):
+            if url.endswith('uploadBlob'):
+                return upload(data, headers)
+            raise http_error(400, 'RecordNotFound')
+
+        def call(nsid, payload, token=None):
+            if nsid.endswith('createRecord'):
+                sent.update(payload['record'])
+            return {'uri': 'at://did:plc:test/app.bsky.feed.post/abc', 'cid': 'c'}
+
+        with patch.object(announce, '_bluesky_session',
+                          return_value={'did': 'did:plc:test', 'accessJwt': 'test'}), \
+                patch.object(announce, '_request', side_effect=request), \
+                patch.object(announce, '_bluesky_call', side_effect=call):
+            announce.announce_bluesky('Title', '', 'https://site.test', [],
+                                      attempt=self.attempt(), image=image)
+        return sent
+
+    def test_bluesky_card_carries_uploaded_thumbnail(self):
+        blob = {'$type': 'blob', 'ref': {'$link': 'bafk'}, 'mimeType': 'image/png', 'size': 9}
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / 'card.png'
+            image.write_bytes(b'\x89PNG\r\n\x1a\n' + b'x')
+
+            def upload(data, headers):
+                self.assertEqual(data, image.read_bytes())
+                self.assertEqual(headers['Content-Type'], 'image/png')
+                return {'blob': blob}
+
+            record = self.bluesky_record(str(image), upload)
+        self.assertEqual(record['embed']['external']['thumb'], blob)
+
+    def test_bluesky_thumbnail_failure_still_announces(self):
+        def upload(data, headers):
+            raise TimeoutError('offline')
+
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / 'card.png'
+            image.write_bytes(b'\x89PNG\r\n\x1a\n' + b'x')
+            record = self.bluesky_record(str(image), upload)
+        self.assertEqual(record['embed']['external']['title'], 'Title')
+        self.assertNotIn('thumb', record['embed']['external'])
+
+    def test_card_image_follows_og_image_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            content, static = Path(tmp) / 'content', Path(tmp) / 'static'
+            (content / 'assets').mkdir(parents=True)
+            static.mkdir()
+            for path in (content / 'assets' / 'body.jpg', content / 'assets' / 'art.jpg',
+                         static / 'cover.jpg'):
+                path.write_bytes(b'x')
+            with patch.object(announce, 'CONTENT_DIR', str(content)), \
+                    patch.object(announce, 'STATIC_SOURCE_DIRS', (str(static),)), \
+                    patch.object(announce, 'PUBLIC_DIR', str(Path(tmp) / 'public')), \
+                    patch.object(announce, 'PODCAST', {'cover': '/cover.jpg'}):
+                pick = announce.card_image_path
+                fm = 'title: "T"\nimage: assets/art.jpg'
+                self.assertEqual(pick(fm, '![a](assets/body.jpg)', True),
+                                 str(content / 'assets' / 'body.jpg'))
+                self.assertEqual(pick(fm, 'no picture', True),
+                                 str(content / 'assets' / 'art.jpg'))
+                self.assertEqual(pick('title: "T"', 'no picture', True),
+                                 str(static / 'cover.jpg'))
+                # The cover is an episode's fallback, never an article's.
+                self.assertIsNone(pick('title: "T"', 'no picture', False))
+                self.assertIsNone(pick('title: "T"', '![a](https://x.test/a.jpg)', False))
+
     def test_failed_checkpoint_never_sends(self):
         attempt = announce._Attempt({}, lambda: (_ for _ in ()).throw(OSError('disk full')))
         with patch.object(announce, '_mastodon_post') as send:
@@ -167,7 +238,7 @@ class AnnouncementSafety(unittest.TestCase):
             path.write_text('---\ntitle: Test\nslug: test\nannounce: pending\n---\nBody\n')
             sends = []
 
-            def provider(*args, attempt):
+            def provider(*args, attempt, image=None):
                 state = attempt.prepare('account', {'text': 'Test'}, 'stable-key')
                 on_disk = path.read_text()
                 self.assertIn('stable-key', on_disk)
@@ -198,7 +269,7 @@ class AnnouncementSafety(unittest.TestCase):
             path.write_text('---\ntitle: Test\nannounce: pending\n---\nBody\n')
             sends = []
 
-            def provider(*args, attempt):
+            def provider(*args, attempt, image=None):
                 state = attempt.prepare('account', {'text': 'Test'}, 'stable-key')
                 if 'response' not in state:
                     sends.append('sent')

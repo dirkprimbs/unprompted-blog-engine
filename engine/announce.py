@@ -75,18 +75,22 @@ from urls import SITE_URL, POSTS_DIR
 # import can't stop an announcement going out with the right URL, but a
 # filesystem layout we can't resolve means we'd scan the wrong directory and
 # silently announce nothing. Better to fail loudly at import time.
-from paths import CONTENT_DIR
+from paths import CONTENT_DIR, PUBLIC_DIR, STATIC_SOURCE_DIRS
 
 # The two announcement prefixes, so which hashtag opens a post is the site's
 # decision rather than this file's, and the two languages they are posted under
 # (see config._announce_prefix / config._announce_language).
 from config import (ANNOUNCE_PREFIX, ANNOUNCE_PODCAST_PREFIX,
-                    ANNOUNCE_LANGUAGE, ANNOUNCE_PODCAST_LANGUAGE)
+                    ANNOUNCE_LANGUAGE, ANNOUNCE_PODCAST_LANGUAGE, PODCAST)
 
 # Only for is_audio(): deciding whether a post is an episode uses exactly the
 # same list of extensions the build does, so the hashtag can never disagree
 # with what actually ends up in the podcast feed.
 import audio
+
+# Only for card_thumbnail(): Bluesky's link card needs its picture uploaded.
+# The module imports Pillow defensively, so this costs nothing without it.
+import images
 
 REQUEST_TIMEOUT = 30
 MAX_RETRIES = 3
@@ -107,6 +111,11 @@ ANNOUNCE_DELAY_SECONDS = float(os.environ.get("ANNOUNCE_DELAY_SECONDS", "15"))
 # several codepoints into one grapheme), so staying under this is always safe.
 BLUESKY_MAX_CHARS = 300
 BLUESKY_MAX_BYTES = 3000
+
+# A link card's thumbnail is an uploaded blob, and the lexicon caps it at
+# 1,000,000 bytes. Kept a little under so a borderline file is resized here
+# rather than rejected there.
+BLUESKY_THUMB_MAX_BYTES = 950_000
 
 # Mastodon's default status limit. This used to be treated as "generous enough
 # not to need trimming", which held right up until a post with 17 tags produced
@@ -278,6 +287,50 @@ def is_episode(fm, body):
     return False
 
 
+def _served_file(src):
+    """The file on disk behind a root-relative URL of this site, or None.
+
+    'assets/...' is a hosted image and lives in content/assets/. Anything else
+    at the root comes from a static source directory - the site's own uploads
+    win over the theme, as they do in publish.sh's copy order - with public/ as
+    the last resort for something only the build produced."""
+    src = str(src or "").strip().lstrip("/")
+    if not src or re.match(r"[a-z][a-z0-9+.-]*:", src, re.IGNORECASE):
+        return None
+    roots = ((CONTENT_DIR,) if src.startswith("assets/")
+             else (*reversed(STATIC_SOURCE_DIRS), PUBLIC_DIR))
+    for root in roots:
+        path = os.path.join(root, src)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def card_image_path(fm, body, episode=False):
+    """The local file behind a post's social card, or None.
+
+    The same order build_blog._card_image() uses for og:image - the first
+    hosted image in the body (Markdown or raw HTML), then the frontmatter
+    'image', then for an episode the show's cover - so the card Bluesky is
+    handed shows the picture every crawling network finds for itself. Remote
+    images are skipped: the build never hosts them, so there is no file to
+    upload.
+
+    The cover fallback is episodes-only for the reason given there: a written
+    post without a picture has nothing of its own to show, while an episode
+    always has at least the artwork of its show."""
+    candidates = re.findall(r'!\[.*?\]\(\s*(assets/[^)\s"]+)', body)
+    candidates += re.findall(r'src="(assets/[^"]+)"', body)
+    candidates.append(_fm_value(fm, "image"))
+    if episode and PODCAST:
+        candidates.append(PODCAST.get("cover"))
+    for src in candidates:
+        path = _served_file(src)
+        if path:
+            return path
+    return None
+
+
 def hashtagify(tag):
     """Turn an article tag into a valid hashtag.
 
@@ -387,8 +440,11 @@ def _mastodon_language(tag):
 
 
 def announce_mastodon(title, summary, url, tags, prefix=ANNOUNCE_PREFIX,
-                      language=ANNOUNCE_LANGUAGE, *, attempt):
-    """Toot the post and return its frontmatter coordinates."""
+                      language=ANNOUNCE_LANGUAGE, *, attempt, image=None):
+    """Toot the post and return its frontmatter coordinates.
+
+    `image` is unused: Mastodon builds its preview card by crawling the page,
+    og:image included."""
     host = _mastodon_server()
     # Mastodon counts every link as a flat MASTODON_URL_WEIGHT characters however
     # long it really is, so the raw string may exceed the limit by exactly what
@@ -520,10 +576,44 @@ def build_facets(text, url):
     return facets
 
 
+def _bluesky_thumb(image, session):
+    """Upload `image` as a card thumbnail and return its blob, or None.
+
+    Best-effort from end to end: no image, one that cannot be brought under the
+    size cap, or a failed upload all mean a card without a picture - never a
+    lost announcement."""
+    if not image:
+        return None
+    thumb = images.card_thumbnail(image, BLUESKY_THUMB_MAX_BYTES)
+    if thumb is None:
+        print(f"   ⚠️  No Bluesky thumbnail: {os.path.basename(image)} is over "
+              f"{BLUESKY_THUMB_MAX_BYTES // 1000} KB and could not be resized"
+              f"{'' if images.AVAILABLE else ' (Pillow is not installed)'}.")
+        return None
+    data, mime = thumb
+    try:
+        return _request(
+            f"https://{_bluesky_pds()}/xrpc/com.atproto.repo.uploadBlob",
+            data=data,
+            headers={"Content-Type": mime,
+                     "Authorization": f"Bearer {session['accessJwt']}"},
+        )["blob"]
+    except Exception as e:
+        print(f"   ⚠️  Thumbnail upload failed ({e}). Posting without it.")
+        return None
+
+
 def announce_bluesky(title, summary, url, tags, prefix=ANNOUNCE_PREFIX,
-                     language=ANNOUNCE_LANGUAGE, *, attempt):
+                     language=ANNOUNCE_LANGUAGE, *, attempt, image=None):
     """Post to Bluesky and return its frontmatter coordinates."""
     session = _bluesky_session()
+    # Uploaded before the record is prepared, because the record names the blob.
+    # Also on a retry of an attempt that never got its answer: the PDS discards
+    # blobs no record refers to, and the same bytes upload to the same CID, so
+    # this puts back exactly the blob the checkpointed record expects. Only an
+    # attempt that already has its response has nothing left to send.
+    thumb = (_bluesky_thumb(image, session)
+             if attempt.state.get('response') is None else None)
     text = build_announcement(title, summary, url, tags,
                               limit=BLUESKY_MAX_CHARS, prefix=prefix)
     if len(text.encode("utf-8")) > BLUESKY_MAX_BYTES:
@@ -548,15 +638,16 @@ def announce_bluesky(title, summary, url, tags, prefix=ANNOUNCE_PREFIX,
         # the card made every announcement read twice. An empty 'description'
         # renders the card as a compact title + domain chip, which is the point
         # of keeping it at all - a real tap target instead of bare blue text.
-        # No 'thumb' either, because a thumbnail must be uploaded as a blob
-        # under 1MB and that would drag image resizing (and the optional Pillow
-        # dependency) into the announce path for a decoration.
+        # 'thumb' is there when the post has a picture of its own (see
+        # card_image_path) and absent otherwise - the same rule og:image
+        # follows, so a post without one keeps the compact chip.
         "embed": {
             "$type": "app.bsky.embed.external",
             "external": {
                 "uri": url,
                 "title": title[:300],
                 "description": "",
+                **({"thumb": thumb} if thumb else {}),
             },
         },
     }
@@ -745,6 +836,7 @@ def _announce_all():
         if not slug.endswith(".html"):
             slug += ".html"
         url = f"{SITE_URL}/{POSTS_DIR}/{slug}"
+        image = card_image_path(fm, body, episode)
 
         todo = [p for p in enabled if not _has_coordinates(fm, p)]
         new_lines = []
@@ -763,7 +855,8 @@ def _announce_all():
                 attempt = _Attempt(states.setdefault(provider['name'], {}), checkpoint)
                 coordinates, link = provider["announce"](title, summary, url,
                                                         tags, prefix, language,
-                                                        attempt=attempt)
+                                                        attempt=attempt,
+                                                        image=image)
             except Exception as e:
                 print(f"   ⚠️  Failed to announce '{filename}' on "
                       f"{provider['name']} ({e}). Left pending; will retry "

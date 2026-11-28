@@ -313,3 +313,70 @@ def optimize(path, max_width=1600, jpeg_quality=82, min_bytes=200_000):
     except Exception as exc:
         print(f"   ⚠️  Could not optimise {os.path.basename(path)}: {exc}")
         return path, 0
+
+
+# The image types a social network accepts as a card thumbnail, recognised by
+# their leading bytes so this works without Pillow.
+_THUMB_SIGNATURES = (
+    (b'\xff\xd8\xff', 'image/jpeg'),
+    (b'\x89PNG\r\n\x1a\n', 'image/png'),
+)
+
+
+def _sniff_mime(data):
+    for signature, mime in _THUMB_SIGNATURES:
+        if data.startswith(signature):
+            return mime
+    if data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return 'image/webp'
+    return None
+
+
+def card_thumbnail(path, max_bytes, max_edge=1200):
+    """(bytes, mime type) of a thumbnail for `path` within `max_bytes`, or None.
+
+    For announce.py, which has to *upload* a link card's picture where the
+    networks that crawl og:image fetch it themselves. Nothing is written to
+    disk: the result exists only for the upload.
+
+    A file that already fits is returned byte-for-byte, which needs no Pillow -
+    so a site without the optional dependency still gets a thumbnail for every
+    reasonably sized image, and loses it only for the oversized ones. Anything
+    larger is downscaled to `max_edge` and encoded as JPEG, stepping the
+    quality down until it fits. JPEG even for drawings, unlike optimize(): at
+    card size nobody can see the ringing, and a card that fits beats none.
+
+    Every failure returns None. A thumbnail is decoration, and its absence must
+    never cost an announcement.
+    """
+    try:
+        with open(path, 'rb') as fh:
+            data = fh.read()
+    except OSError:
+        return None
+    mime = _sniff_mime(data)
+    if mime and len(data) <= max_bytes:
+        return data, mime
+    if not AVAILABLE:
+        return None
+    try:
+        import io
+        img, _, _ = _open(path)
+        with img:
+            # JPEG has no alpha channel: flatten onto white rather than let
+            # Pillow turn transparent areas black.
+            if img.mode in ('RGBA', 'LA') or 'transparency' in img.info:
+                rgba = img.convert('RGBA')
+                flat = Image.new('RGB', rgba.size, (255, 255, 255))
+                flat.paste(rgba, mask=rgba.getchannel('A'))
+            else:
+                flat = img.convert('RGB')
+            flat.thumbnail((max_edge, max_edge), Image.LANCZOS)
+            for quality in (85, 75, 65, 50):
+                out = io.BytesIO()
+                flat.save(out, 'JPEG', quality=quality, optimize=True)
+                if out.tell() <= max_bytes:
+                    return out.getvalue(), 'image/jpeg'
+    except Exception:
+        return None
+    return None
