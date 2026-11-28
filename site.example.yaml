@@ -146,6 +146,46 @@ links:
 #         href: "https://mastodon.social/@example"
 
 
+# --- Links shared between several sites (optional) ---------------------------
+# Only useful if you run more than one site and want them to link to each other
+# the same way everywhere. Point `network` at a file kept outside the sites -
+# the path is relative to this file - and a `nav:` or `footer.links` entry can
+# then be written as `network: <key>` instead of a label and an href. Rename a
+# site or move it, and one edit to that file reaches every menu on the next
+# build.
+#
+# The file maps names to entries of the same shape `nav:` takes. A label may be
+# a plain string or one string per language, picked by this site's
+# `site.language`. It is read as YAML, so plain JSON works too:
+#
+#   blog:
+#     label: "Blog"
+#     href: "https://blog.example.com"
+#   talks:
+#     label: { en: "Talks", de: "Vorträge" }
+#     href: "https://talks.example.com"
+#   shows:
+#     label: "Podcasts"
+#     items:
+#       - label: "First show"
+#         href: "https://first.example.com"
+#
+# In a menu, an entry that points at the site being built is marked as the
+# current one rather than left out, so the list reads the same on every site.
+# Add `label:` beside `network:` to rename an entry on this site only.
+#
+# network: "../network.yaml"
+#
+# nav:
+#   - label: "Home"
+#     href: "/"
+#   - network: blog
+#   - network: shows
+#   - label: "More"
+#     items:
+#       - network: talks
+
+
 
 # --- Podcast (wholly optional) -----------------------------------------------
 # Leave this section out entirely and the engine publishes text exactly as
@@ -310,6 +350,18 @@ footer:
   ai_label: "AI Transparency Label: EP-SN-IH-TN"
   ai_explainer: "Everything ideated and originally written by yours truly, LLM used for engine development and text refinement."
   ai_explainer_url: "https://have-a-look.at/aitags"
+
+  # Optional: a row of plain links above the label, for what every page should
+  # offer but nobody navigates by - contact, your profiles elsewhere, a legal
+  # notice. Same entries as `nav:` (including `network: <key>`), without
+  # submenus. A link matching links.mastodon or links.bluesky keeps rel="me".
+  # links:
+  #   - label: "Mastodon"
+  #     href: "https://mastodon.social/@example"
+  #   - label: "Contact"
+  #     href: "mailto:you@example.com"
+  #   - label: "Imprint"
+  #     href: "/imprint.html"
 
 display:
   # Posts per page on the homepage and on each tag page.

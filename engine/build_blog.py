@@ -33,7 +33,7 @@ from config import (
     SITE_NAME, SITE_DESCRIPTION, FEED_DESCRIPTION, AUTHOR_NAME,
     AI_LABEL, AI_EXPLAINER, AI_EXPLAINER_URL,
     AUTHOR_EMAIL, LINK_ABOUT, LINK_MASTODON, FEDIVERSE_CREATOR,
-    LINK_BLUESKY, BLUESKY_CREATOR, SITE_TAGLINE, NAV,
+    LINK_BLUESKY, BLUESKY_CREATOR, SITE_TAGLINE, NAV, FOOTER_LINKS,
     PAGE_SIZE, FEED_ITEMS, VISIBLE_TAGS, WORDS_PER_MINUTE, TAG_EMOJI,
     IMAGE_MAX_WIDTH, IMAGE_JPEG_QUALITY, IMAGE_MIN_BYTES,
     PODCAST, PODCAST_ENABLED, REDIRECTS, ARCHIVE_HEADING,
@@ -1315,6 +1315,21 @@ def _is_external(href):
         return False
     return parsed.netloc.lower().removeprefix('www.') not in _OWN_HOSTS
 
+
+def _is_own_home(href):
+    """True when an absolute URL is this site's own front page.
+
+    Only an absolute one counts. A menu shared between several sites spells
+    every site out in full, this one included, and that is the link to mark as
+    "you are here". The site's own "/" entry is not: it is the way back to the
+    front page from every other page, and marking it would claim the reader is
+    on a page they are not."""
+    parsed = urlparse(href)
+    if parsed.scheme not in ('http', 'https'):
+        return False
+    return (parsed.netloc.lower().removeprefix('www.') in _OWN_HOSTS
+            and parsed.path in ('', '/') and not parsed.query)
+
 # --- Transcripts -------------------------------------------------------------
 
 # Any paragraph or heading, so a marker survives however the source spelled it.
@@ -2201,7 +2216,9 @@ def _nav_link_html(entry, extra_class=''):
     # gated on _is_external: an author whose instance lives on their own domain
     # gets no target/noopener, and would have got no rel at all.
     rel = ['me'] if _is_identity_url(href) else []
-    attrs = ''
+    # A shared menu lists this site among its siblings; say which one it is
+    # rather than leaving a link that appears to go somewhere and does not.
+    attrs = ' aria-current="true"' if _is_own_home(href) else ''
     if _is_external(href):
         attrs = ' target="_blank"'
         rel.append('noopener')
@@ -2256,6 +2273,20 @@ def _header_nav_html():
             f'<label for="nav-toggle" class="nav-toggle-label">'
             f'<span class="nav-toggle-icon" aria-hidden="true"></span>{word}</label>'
             f'<ul class="nav-menu">{"".join(items)}</ul></nav>')
+
+
+def _footer_links_html():
+    """The footer's link row from site.yaml's `footer.links`, or '' without one.
+
+    Built by _nav_link_html, so these links get exactly what the header's do:
+    off-site ones open in a new tab, and one that is the author's own profile
+    carries rel="me" - a site that moves its Mastodon link down here keeps its
+    verification."""
+    if not FOOTER_LINKS:
+        return ''
+    items = ''.join(f'<li>{_nav_link_html(link)}</li>' for link in FOOTER_LINKS)
+    return (f'<nav class="footer-links" aria-label="Footer">'
+            f'<ul>{items}</ul></nav>')
 
 
 def _menu_word():
@@ -2631,6 +2662,7 @@ def safe_render(template, mappings):
     mappings.setdefault("%SITE_LANG%", esc(SITE_LANGUAGE))
     mappings.setdefault("%THEME_OVERRIDES%", _theme_overrides_html())
     mappings.setdefault("%HEADER_NAV%", _header_nav_html())
+    mappings.setdefault("%FOOTER_LINKS%", _footer_links_html())
     mappings.setdefault("%SUBSCRIBE_ITEM%", _subscribe_item_html())
     mappings.setdefault("%HEADER_RSS%", _header_rss_html())
     mappings.setdefault("%SITE_BRANDING%", _site_branding_html())

@@ -258,6 +258,12 @@ header:has(.site-branding) .logo { display: none; }
 .site-nav li:focus-within > .submenu-parent {
     color: var(--accent);
 }
+/* This site's own entry in a menu shared with its siblings - see
+   _is_own_home(). Coloured rather than hidden, so the list reads the same on
+   every site and a reader can tell where in it they are. */
+.site-nav a[aria-current] {
+    color: var(--accent);
+}
 /* A section that groups links without linking anywhere itself is a <span>, not
    an <a> - see _nav_link_html(). It still needs to look like the rest of the
    row, and it must be focusable so a keyboard can open the submenu under it. */
@@ -900,6 +906,23 @@ details.more-tags summary:hover {
 }
 .site-footer a:hover {
     text-decoration: underline;
+}
+/* The optional link row (site.yaml `footer.links`). It wraps rather than
+   scrolls: it is a handful of short links, and the last one is usually the
+   legal notice, which must not end up off the edge of a phone. */
+.site-footer .footer-links {
+    margin-bottom: 14px;
+}
+.site-footer .footer-links ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+}
+.site-footer .footer-links a {
+    font-weight: 600;
 }
 
 /* --- BLOCKQUOTES --- */

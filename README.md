@@ -55,7 +55,9 @@ This matters more than the visible fields suggest: the invisible ones - the JSON
 
 The header's menu is configuration too. By default it carries About, your social links and Contact; add a `nav:` section to `site.yaml` and that list is replaced by your own, including one level of dropdowns. Submenus open on hover and on keyboard focus with no JavaScript, and sit inline and permanently open on narrow screens, where a hover target cannot be reached. Setting `site.tagline` puts the site name and that line in a masthead band above the menu row, which then stays stuck to the top on its own.
 
-To change the footer's *markup* (as opposed to its wording), edit `engine/templates/base.html`.
+The footer can carry a row of links as well: list them under `footer.links` and they appear above the AI label on every page - the place for contact, your profiles elsewhere and a legal notice, which every page should offer but nobody navigates by. To change the footer's *markup* beyond that, edit `engine/templates/base.html`.
+
+If you run several sites on this engine, the links between them can be written down once. Set `network:` to the path of a shared file of named links, and any `nav:` or `footer.links` entry can be `network: <key>` instead of a label and a URL. Labels in that file may be given per language, and the entry for the site being built is marked as the current one, so the same menu reads correctly on every site. `site.example.yaml` shows the file's format.
 
 ### Configure the AI pipeline (optional)
 

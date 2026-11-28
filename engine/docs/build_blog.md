@@ -316,7 +316,10 @@ a keyboard can reach it and open the submenu underneath - which is revealed by
 `:focus-within`, and so never opens if nothing in the branch can be focused.
 
 Off-site hrefs get `target="_blank" rel="noopener"`, matching what article
-bodies get from `_externalize_links()`.
+bodies get from `_externalize_links()`. A link for which `_is_own_home()` holds
+gets `aria-current="true"`, which style.css colours with the accent.
+
+Also builds the footer's links, so both rows treat a link the same way.
 
 ### `_header_nav_html()`
 
@@ -337,6 +340,15 @@ open state has to live in the document for CSS to read, and a menu that needs
 a script to open is a menu that is missing whenever the script is. The
 checkbox carries `autocomplete="off"` so Firefox does not restore an open menu
 on Back.
+
+### `_footer_links_html()`
+
+The footer's link row from `site.yaml`'s `footer.links` (see
+`config._footer_links()`), as a whole `<nav class="footer-links">`, or `''`
+when there are none. Each link goes through `_nav_link_html()`, so off-site
+ones open in a new tab and one that is the author's own profile carries
+`rel="me"` - a site that moves its Mastodon link down here keeps its
+verification.
 
 ### `_menu_word()`
 
@@ -407,6 +419,14 @@ sometimes hand-written into drafts to survive the self-healing pass (which
 exempts anything with an http(s) scheme), and those must keep behaving like
 ordinary internal links. Anything without an http(s) scheme - mailto:, tel:,
 '#anchor', root-relative paths - is internal by definition.
+
+### `_is_own_home(href)`
+
+True when an absolute URL is this site's own front page. Only an absolute one
+counts: a menu shared between several sites (`network:` in `site.yaml`) spells
+every site out in full, this one included, and that is the link to mark as
+"you are here". The site's own `/` entry is not - it is the way back to the
+front page from every other page.
 
 ### `_externalize_links(html_body)`
 

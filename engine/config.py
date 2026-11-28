@@ -257,6 +257,145 @@ if (_CONFIGURED_MASTODON and _DERIVED_MASTODON
 LINK_BLUESKY = _optional_link('bluesky')
 BLUESKY_CREATOR = _optional_link('bluesky_creator')
 
+def _localized_label(value, language, where):
+    """One label out of a shared links file, in the site's language.
+
+    A label there is either a plain string or a mapping of language tag to
+    string ({en: "Talks", de: "Vorträge"}), because the same file feeds sites
+    written in different languages. The match is the full tag first ('de-DE'),
+    then its primary subtag ('de'), then 'en', then whatever comes first - a
+    link with a label in the wrong language is still a link, and a missing one
+    is not."""
+    if isinstance(value, dict):
+        labels = {str(k).strip().lower(): str(v or '').strip()
+                  for k, v in value.items()}
+        labels = {k: v for k, v in labels.items() if v}
+        tag = str(language or '').strip().lower()
+        for key in (tag, tag.split('-')[0], 'en'):
+            if labels.get(key):
+                return labels[key]
+        if labels:
+            return next(iter(labels.values()))
+        _fail(f"❌ {where} has a 'label' with no text in any language.")
+    return str(value or '').strip()
+
+
+def _link_entry(item, where, allow_children, network=None, language='en'):
+    """One validated menu entry: {'label': str, 'href': str, 'items': [...]}.
+
+    The shape every link list in this file shares - `nav:`, `footer.links` and
+    the entries of a shared links file - so they are validated by one function
+    and cannot drift into three slightly different schemas.
+
+    `network` is the already-loaded shared links file (see _network), or None
+    while that file itself is being read: an entry there cannot point at
+    another one. With it, an entry may be written as `network: <key>` instead
+    of spelling out label and href, optionally with a `label` of its own to
+    rename it on this site."""
+    if not isinstance(item, dict):
+        _fail(f"❌ {where} must be a mapping with 'label' and 'href' "
+              f"(got {type(item).__name__}).")
+
+    key = item.get('network')
+    if key is not None:
+        if network is None:
+            _fail(f"❌ {where} uses 'network:', which is only available in "
+                  f"site.yaml - a shared links file cannot refer to itself.")
+        if not network:
+            _fail(f"❌ {where} refers to the shared link {key!r}, but "
+                  f"site.yaml names no shared links file.",
+                  f"💡 Add a top-level   network: \"path/to/file\"   key.")
+        key = str(key).strip()
+        if key not in network:
+            _fail(f"❌ {where} refers to the shared link {key!r}, which the "
+                  f"shared links file does not define.",
+                  f"💡 It defines: {', '.join(sorted(network)) or '(nothing)'}")
+        extra = sorted(set(item) - {'network', 'label'})
+        if extra:
+            _fail(f"❌ {where} (shared link {key!r}) also sets "
+                  f"{', '.join(extra)}. A shared link takes its target from "
+                  f"the shared file; only 'label' can be overridden here.")
+        shared = network[key]
+        if shared['items'] and not allow_children:
+            _fail(f"❌ {where}: the shared link {key!r} carries a submenu, "
+                  f"but submenus are only one level deep.")
+        label = _localized_label(item.get('label'), language, where)
+        return {'label': label or shared['label'], 'href': shared['href'],
+                'items': [dict(c) for c in shared['items']]}
+
+    label = _localized_label(item.get('label'), language, where)
+    if not label:
+        _fail(f"❌ {where} is missing 'label'.")
+    href = str(item.get('href') or '').strip()
+    children = item.get('items')
+    if children is not None and not allow_children:
+        _fail(f"❌ {where} ({label!r}) has 'items', "
+              f"but submenus are only one level deep.")
+    if children is None:
+        children = []
+    elif not isinstance(children, list):
+        _fail(f"❌ {where} ({label!r}) has 'items' "
+              f"that is not a list (got {type(children).__name__}).")
+    else:
+        children = [_link_entry(c, f"{where} ({label!r}) -> items[{i}]", False,
+                                network, language)
+                    for i, c in enumerate(children)]
+    if not href and not children:
+        _fail(f"❌ {where} ({label!r}) needs an "
+              f"'href', 'items', or both - it currently links nowhere.")
+    return {'label': label, 'href': href, 'items': children}
+
+
+def _load_network(path, language):
+    """Read a shared links file into {key: entry}.
+
+    The file is a mapping of names to entries of the same shape `nav:` takes,
+    except that a label may be given per language. It is parsed as YAML, which
+    makes plain JSON equally valid - useful when something other than this
+    engine has to read the same file with nothing but a JSON parser."""
+    if not os.path.exists(path):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': network points at '{path}', "
+              f"which does not exist.")
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        _fail(f"❌ Could not parse '{path}': {exc}")
+    if not isinstance(data, dict):
+        _fail(f"❌ '{path}' must be a mapping of names to links "
+              f"(got {type(data).__name__}).")
+    return {str(key).strip(): _link_entry(item, f"'{path}': {key!r}", True,
+                                          None, language)
+            for key, item in data.items()}
+
+
+def _network():
+    """site.yaml `network:` - a file of links several sites share.
+
+    Optional, and absent is the normal case. It exists for an author who runs
+    more than one site and wants the links between them written down once: each
+    site.yaml then says `network: blog` in its `nav:` or `footer.links` instead
+    of repeating a label and a URL that have to be kept identical by hand in
+    every copy - which is the kind of consistency that lasts until the first
+    site is renamed.
+
+    The path is relative to site.yaml, so a file one directory up is shared by
+    every site checked out beside this one."""
+    raw = _cfg.get('network')
+    if raw is None:
+        return {}
+    if not isinstance(raw, str) or not raw.strip():
+        _fail(f"❌ '{SITE_CONFIG_PATH}': network must be the path of a shared "
+              f"links file (got {raw!r}).")
+    path = os.path.expanduser(raw.strip())
+    if not os.path.isabs(path):
+        path = os.path.join(os.path.dirname(SITE_CONFIG_PATH), path)
+    return _load_network(os.path.normpath(path), SITE_LANGUAGE)
+
+
+NETWORK = _network()
+
+
 def _nav():
     """The header's link list, as an ordered list of entries:
 
@@ -273,6 +412,9 @@ def _nav():
     its own. Submenus are one level deep on purpose; anything deeper wants a
     page, not a hover target that cannot be reached on a touchscreen.
 
+    An entry, or an item inside one, may instead be `network: <key>`, which
+    pulls it from the shared links file (see _network).
+
     Validation is loud rather than lenient, matching the rest of this file. A
     mistyped key here does not corrupt anything, but it silently drops a link
     from every page of the site - and a missing menu entry is exactly the kind
@@ -284,36 +426,39 @@ def _nav():
     if not isinstance(raw, list):
         _fail(f"❌ '{SITE_CONFIG_PATH}': nav must be a list of menu entries "
               f"(got {type(raw).__name__}).")
-
-    def _entry(item, where, allow_children):
-        if not isinstance(item, dict):
-            _fail(f"❌ '{SITE_CONFIG_PATH}': {where} must be a mapping with "
-                  f"'label' and 'href' (got {type(item).__name__}).")
-        label = str(item.get('label') or '').strip()
-        if not label:
-            _fail(f"❌ '{SITE_CONFIG_PATH}': {where} is missing 'label'.")
-        href = str(item.get('href') or '').strip()
-        children = item.get('items')
-        if children is not None and not allow_children:
-            _fail(f"❌ '{SITE_CONFIG_PATH}': {where} ({label!r}) has 'items', "
-                  f"but submenus are only one level deep.")
-        if children is None:
-            children = []
-        elif not isinstance(children, list):
-            _fail(f"❌ '{SITE_CONFIG_PATH}': nav entry {label!r} has 'items' "
-                  f"that is not a list (got {type(children).__name__}).")
-        else:
-            children = [_entry(c, f"nav entry {label!r} -> items[{i}]", False)
-                        for i, c in enumerate(children)]
-        if not href and not children:
-            _fail(f"❌ '{SITE_CONFIG_PATH}': {where} ({label!r}) needs an "
-                  f"'href', 'items', or both - it currently links nowhere.")
-        return {'label': label, 'href': href, 'items': children}
-
-    return [_entry(item, f"nav[{i}]", True) for i, item in enumerate(raw)]
+    return [_link_entry(item, f"'{SITE_CONFIG_PATH}': nav[{i}]", True,
+                        NETWORK, SITE_LANGUAGE)
+            for i, item in enumerate(raw)]
 
 
 NAV = _nav()
+
+
+def _footer_links():
+    """footer.links: a row of plain links above the footer's label.
+
+    Optional. The header menu is for getting around the site; this is the place
+    for what every page should offer but no reader navigates by - contact, the
+    author's profiles elsewhere, the legal notice. Entries are the same shape
+    as `nav:` ones (including `network: <key>`), minus submenus: a footer has
+    nowhere to open one."""
+    raw = _cfg['footer'].get('links')
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        _fail(f"❌ '{SITE_CONFIG_PATH}': footer.links must be a list of links "
+              f"(got {type(raw).__name__}).")
+    links = [_link_entry(item, f"'{SITE_CONFIG_PATH}': footer.links[{i}]",
+                         False, NETWORK, SITE_LANGUAGE)
+             for i, item in enumerate(raw)]
+    for link in links:
+        if not link['href']:
+            _fail(f"❌ '{SITE_CONFIG_PATH}': footer link {link['label']!r} "
+                  f"needs an 'href'.")
+    return links
+
+
+FOOTER_LINKS = _footer_links()
 
 AI_LABEL = str(_cfg['footer']['ai_label'])
 AI_EXPLAINER = str(_cfg['footer']['ai_explainer'])
